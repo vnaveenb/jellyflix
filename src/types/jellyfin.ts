@@ -7,6 +7,7 @@ export interface JellyfinUser {
   PrimaryImageTag?: string
   Policy?: {
     IsAdministrator?: boolean
+    EnableContentDeletion?: boolean
   }
 }
 
@@ -29,6 +30,10 @@ export interface JellyfinMediaStream {
   AspectRatio?: string
   BitRate?: number
   Channels?: number
+  SampleRate?: number
+  BitDepth?: number
+  Profile?: string
+  Level?: number
   DeliveryMethod?: string
   DeliveryUrl?: string
 }
@@ -56,6 +61,13 @@ export interface JellyfinUserData {
   LastPlayedDate?: string
 }
 
+export interface JellyfinChapter {
+  StartPositionTicks: number
+  Name: string
+  ImagePath?: string
+  ImageTag?: string
+}
+
 export interface JellyfinItem {
   Id: string
   Name: string
@@ -69,6 +81,10 @@ export interface JellyfinItem {
   CommunityRating?: number
   CriticRating?: number
   RunTimeTicks?: number
+  Path?: string
+  Container?: string
+  Size?: number
+  Bitrate?: number
   Genres?: string[]
   Studios?: { Id: string; Name: string }[]
   Taglines?: string[]
@@ -90,6 +106,7 @@ export interface JellyfinItem {
   ParentIndexNumber?: number
   MediaSources?: JellyfinMediaSource[]
   MediaStreams?: JellyfinMediaStream[]
+  Chapters?: JellyfinChapter[]
   People?: {
     Id: string
     Name: string
@@ -98,6 +115,7 @@ export interface JellyfinItem {
     PrimaryImageTag?: string
   }[]
   ChildCount?: number
+  RemoteTrailers?: { Url: string; Name?: string }[]
 }
 
 export interface JellyfinItemsResponse {
@@ -115,4 +133,14 @@ export interface PlaybackSessionReport {
   IsPaused?: boolean
   PlayMethod?: 'DirectPlay' | 'DirectStream' | 'Transcode'
   EventName?: string
+}
+
+export interface RemoteSearchResult {
+  Name: string
+  ProductionYear?: number
+  IndexNumber?: number
+  SearchProviderName?: string
+  Overview?: string
+  ImageUrl?: string
+  ProviderIds?: Record<string, string>
 }

@@ -10,6 +10,7 @@ interface ContentRowProps {
   onPlay: (item: JellyfinItem) => void
   onMoreInfo: (item: JellyfinItem) => void
   onToggleFavorite?: (item: JellyfinItem) => void
+  onToggleWatched?: (item: JellyfinItem) => void
 }
 
 export const ContentRow: React.FC<ContentRowProps> = ({
@@ -19,6 +20,7 @@ export const ContentRow: React.FC<ContentRowProps> = ({
   onPlay,
   onMoreInfo,
   onToggleFavorite,
+  onToggleWatched,
 }) => {
   const trackRef = useRef<HTMLDivElement>(null)
 
@@ -61,6 +63,7 @@ export const ContentRow: React.FC<ContentRowProps> = ({
               onPlay={onPlay}
               onMoreInfo={onMoreInfo}
               onToggleFavorite={onToggleFavorite}
+              onToggleWatched={onToggleWatched}
             />
           ))}
         </div>

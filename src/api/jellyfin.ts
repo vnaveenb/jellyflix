@@ -4,6 +4,7 @@ import type {
   JellyfinItemsResponse,
   JellyfinUser,
   PlaybackSessionReport,
+  RemoteSearchResult,
 } from '../types/jellyfin'
 
 const CLIENT_NAME = 'JellyFlix'
@@ -70,8 +71,10 @@ export class JellyfinApi {
   private async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {
     const apiBase = this.getApiBase()
     const url = `${apiBase}${path.startsWith('/') ? path : '/' + path}`
+    const authHeader = this.getAuthHeader()
     const headers: Record<string, string> = {
-      'X-Emby-Authorization': this.getAuthHeader(),
+      'Authorization': authHeader,
+      'X-Emby-Authorization': authHeader,
       ...(options.headers as Record<string, string>),
     }
 
@@ -198,7 +201,10 @@ export class JellyfinApi {
 
   // Item Details
   async getItem(userId: string, itemId: string): Promise<JellyfinItem> {
-    return this.fetch<JellyfinItem>(`/Users/${userId}/Items/${itemId}`)
+    const params = new URLSearchParams({
+      Fields: 'Overview,MediaSources,MediaStreams,Chapters,Path,Size,Container,Bitrate,RemoteTrailers,People,Genres,Studios,Taglines',
+    })
+    return this.fetch<JellyfinItem>(`/Users/${userId}/Items/${itemId}?${params.toString()}`)
   }
 
   // Seasons for Series
@@ -215,9 +221,37 @@ export class JellyfinApi {
     const params = new URLSearchParams({
       UserId: userId,
       SeasonId: seasonId,
-      Fields: 'Overview,PrimaryImageAspectRatio,UserData,MediaSources',
+      Fields: 'Overview,PrimaryImageAspectRatio,UserData,MediaSources,MediaStreams,Chapters,Path,Size',
     })
     return this.fetch<JellyfinItemsResponse>(`/Shows/${seriesId}/Episodes?${params.toString()}`)
+  }
+
+  // Find Next Episode in Series
+  async getNextEpisode(
+    seriesId: string,
+    seasonId: string,
+    currentEpisodeIndex: number,
+    userId: string
+  ): Promise<JellyfinItem | null> {
+    try {
+      const epRes = await this.getEpisodes(seriesId, seasonId, userId)
+      const currentList = epRes.Items || []
+      const nextInSeason = currentList.find((ep) => (ep.IndexNumber ?? 0) === currentEpisodeIndex + 1)
+      if (nextInSeason) return nextInSeason
+
+      // Check next season
+      const seasonRes = await this.getSeasons(seriesId, userId)
+      const seasons = seasonRes.Items || []
+      const currentSeasonIdx = seasons.findIndex((s) => s.Id === seasonId)
+      if (currentSeasonIdx !== -1 && currentSeasonIdx + 1 < seasons.length) {
+        const nextSeason = seasons[currentSeasonIdx + 1]
+        const nextSeasonEps = await this.getEpisodes(seriesId, nextSeason.Id, userId)
+        return nextSeasonEps.Items?.[0] || null
+      }
+      return null
+    } catch {
+      return null
+    }
   }
 
   // Similar Items (More Like This)
@@ -234,6 +268,66 @@ export class JellyfinApi {
   async setFavorite(userId: string, itemId: string, isFavorite: boolean): Promise<void> {
     const method = isFavorite ? 'POST' : 'DELETE'
     await this.fetch(`/Users/${userId}/FavoriteItems/${itemId}`, { method })
+  }
+
+  // Mark as Watched / Unwatched
+  async markPlayed(userId: string, itemId: string, isPlayed: boolean): Promise<void> {
+    const method = isPlayed ? 'POST' : 'DELETE'
+    await this.fetch(`/Users/${userId}/PlayedItems/${itemId}`, { method })
+  }
+
+  // Update Metadata
+  async updateItem(itemId: string, data: Partial<JellyfinItem>): Promise<void> {
+    await this.fetch(`/Items/${itemId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  // Delete Media
+  async deleteItem(itemId: string): Promise<void> {
+    await this.fetch(`/Items/${itemId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  // Search Remote Metadata (Identify)
+  async searchRemoteMetadata(
+    itemId: string,
+    title: string,
+    year?: number,
+    itemType = 'Movie'
+  ): Promise<RemoteSearchResult[]> {
+    const endpoint = itemType === 'Series' ? '/Items/RemoteSearch/Series' : '/Items/RemoteSearch/Movie'
+    const body: any = {
+      SearchInfo: {
+        Name: title,
+      },
+      ItemId: itemId,
+    }
+    if (year) body.SearchInfo.Year = year
+
+    return this.fetch<RemoteSearchResult[]>(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  }
+
+  // Apply Remote Metadata
+  async applyRemoteMetadata(itemId: string, result: RemoteSearchResult): Promise<void> {
+    await this.fetch(`/Items/RemoteSearch/Apply/${itemId}?ReplaceAllImages=true`, {
+      method: 'POST',
+      body: JSON.stringify(result),
+    })
+  }
+
+  // Get Local Trailers
+  async getLocalTrailers(userId: string, itemId: string): Promise<JellyfinItem[]> {
+    try {
+      return await this.fetch<JellyfinItem[]>(`/Users/${userId}/Items/${itemId}/LocalTrailers`)
+    } catch {
+      return []
+    }
   }
 
   // Playback reporting

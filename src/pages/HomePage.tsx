@@ -9,9 +9,15 @@ interface HomePageProps {
   onPlay: (item: JellyfinItem) => void
   onMoreInfo: (item: JellyfinItem) => void
   onToggleFavorite: (item: JellyfinItem) => void
+  onToggleWatched?: (item: JellyfinItem) => void
 }
 
-export const HomePage: React.FC<HomePageProps> = ({ onPlay, onMoreInfo, onToggleFavorite }) => {
+export const HomePage: React.FC<HomePageProps> = ({
+  onPlay,
+  onMoreInfo,
+  onToggleFavorite,
+  onToggleWatched,
+}) => {
   const { user } = useAuth()
   const [featuredItem, setFeaturedItem] = useState<JellyfinItem | null>(null)
   const [continueWatching, setContinueWatching] = useState<JellyfinItem[]>([])
@@ -115,6 +121,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onPlay, onMoreInfo, onToggle
             onPlay={onPlay}
             onMoreInfo={onMoreInfo}
             onToggleFavorite={onToggleFavorite}
+            onToggleWatched={onToggleWatched}
           />
         )}
 
@@ -125,6 +132,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onPlay, onMoreInfo, onToggle
             onPlay={onPlay}
             onMoreInfo={onMoreInfo}
             onToggleFavorite={onToggleFavorite}
+            onToggleWatched={onToggleWatched}
           />
         )}
 
@@ -136,6 +144,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onPlay, onMoreInfo, onToggle
             onPlay={onPlay}
             onMoreInfo={onMoreInfo}
             onToggleFavorite={onToggleFavorite}
+            onToggleWatched={onToggleWatched}
           />
         )}
 
@@ -146,6 +155,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onPlay, onMoreInfo, onToggle
             onPlay={onPlay}
             onMoreInfo={onMoreInfo}
             onToggleFavorite={onToggleFavorite}
+            onToggleWatched={onToggleWatched}
           />
         )}
 
@@ -156,6 +166,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onPlay, onMoreInfo, onToggle
             onPlay={onPlay}
             onMoreInfo={onMoreInfo}
             onToggleFavorite={onToggleFavorite}
+            onToggleWatched={onToggleWatched}
           />
         )}
 
@@ -166,6 +177,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onPlay, onMoreInfo, onToggle
             onPlay={onPlay}
             onMoreInfo={onMoreInfo}
             onToggleFavorite={onToggleFavorite}
+            onToggleWatched={onToggleWatched}
           />
         )}
       </div>

@@ -68,6 +68,22 @@ const MainApp: React.FC = () => {
     }
   }
 
+  const handleToggleWatched = async (item: JellyfinItem) => {
+    if (!user) return
+    const currentPlayed = !!item.UserData?.Played
+    const nextPlayed = !currentPlayed
+
+    if (item.UserData) {
+      item.UserData.Played = nextPlayed
+    }
+
+    try {
+      await jellyfinApi.markPlayed(user.Id, item.Id, nextPlayed)
+    } catch (err) {
+      console.error('Failed to update watched status:', err)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="profile-screen">
@@ -128,6 +144,7 @@ const MainApp: React.FC = () => {
             onPlay={handlePlay}
             onMoreInfo={handleMoreInfo}
             onToggleFavorite={handleToggleFavorite}
+            onToggleWatched={handleToggleWatched}
           />
         )}
 
@@ -180,6 +197,12 @@ const MainApp: React.FC = () => {
           onClose={() => setDetailModalItem(null)}
           onPlay={handlePlay}
           onToggleFavorite={handleToggleFavorite}
+          onItemUpdated={(updated) => {
+            setDetailModalItem(updated)
+          }}
+          onItemDeleted={() => {
+            setDetailModalItem(null)
+          }}
         />
       )}
 

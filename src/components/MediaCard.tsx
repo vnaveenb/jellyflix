@@ -1,5 +1,5 @@
 import React from 'react'
-import { Play, Heart, Film } from 'lucide-react'
+import { Play, Heart, Film, Check } from 'lucide-react'
 import type { JellyfinItem } from '../types/jellyfin'
 import { jellyfinApi } from '../api/jellyfin'
 
@@ -9,6 +9,7 @@ interface MediaCardProps {
   onPlay: (item: JellyfinItem) => void
   onMoreInfo: (item: JellyfinItem) => void
   onToggleFavorite?: (item: JellyfinItem) => void
+  onToggleWatched?: (item: JellyfinItem) => void
 }
 
 export const MediaCard: React.FC<MediaCardProps> = ({
@@ -17,6 +18,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   onPlay,
   onMoreInfo,
   onToggleFavorite,
+  onToggleWatched,
 }) => {
   // Primary image or Backdrop
   const imageUrl = portrait
@@ -45,6 +47,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   }
 
   const isFavorite = !!item.UserData?.IsFavorite
+  const isPlayed = !!item.UserData?.Played
 
   return (
     <div
@@ -82,9 +85,31 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           <Film size={28} color="#444" />
         </div>
 
-        {/* Badge */}
+        {/* Rating Badge */}
         {item.OfficialRating && (
           <span className="card-overlay-badge">{item.OfficialRating}</span>
+        )}
+
+        {/* Watched Checkmark Overlay */}
+        {isPlayed && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              background: 'rgba(0, 0, 0, 0.75)',
+              border: '1px solid #46d369',
+              borderRadius: '50%',
+              width: 22,
+              height: 22,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="Watched"
+          >
+            <Check size={14} color="#46d369" />
+          </div>
         )}
 
         {/* Progress Bar for Resume / Continue Watching */}
@@ -111,6 +136,20 @@ export const MediaCard: React.FC<MediaCardProps> = ({
             >
               <Play size={16} fill="white" />
             </button>
+
+            {onToggleWatched && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleWatched(item)
+                }}
+                title={isPlayed ? 'Mark as Unwatched' : 'Mark as Watched'}
+                style={{ padding: 2, color: isPlayed ? '#46d369' : '#aaa' }}
+              >
+                <Check size={16} color={isPlayed ? '#46d369' : '#888'} />
+              </button>
+            )}
+
             {onToggleFavorite && (
               <button
                 onClick={(e) => {
