@@ -36,6 +36,8 @@ export interface JellyfinMediaStream {
   Level?: number
   DeliveryMethod?: string
   DeliveryUrl?: string
+  IsTextSubtitleStream?: boolean
+  SupportsExternalStream?: boolean
 }
 
 export interface JellyfinMediaSource {

@@ -23,6 +23,57 @@ import type { JellyfinItem, JellyfinMediaStream } from '../types/jellyfin'
 import { jellyfinApi } from '../api/jellyfin'
 import { useAuth } from '../context/AuthContext'
 
+interface SubtitleCue {
+  start: number
+  end: number
+  text: string
+}
+
+function parseVttTimeToSeconds(timeStr: string): number {
+  const parts = timeStr.trim().split(':')
+  if (parts.length === 3) {
+    const hours = parseFloat(parts[0]) || 0
+    const minutes = parseFloat(parts[1]) || 0
+    const seconds = parseFloat(parts[2].replace(',', '.')) || 0
+    return hours * 3600 + minutes * 60 + seconds
+  } else if (parts.length === 2) {
+    const minutes = parseFloat(parts[0]) || 0
+    const seconds = parseFloat(parts[1].replace(',', '.')) || 0
+    return minutes * 60 + seconds
+  }
+  return 0
+}
+
+function parseVtt(vttText: string): SubtitleCue[] {
+  const cues: SubtitleCue[] = []
+  const lines = vttText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i].trim()
+    if (line.includes('-->')) {
+      const [startStr, rawEndStr] = line.split('-->')
+      const endStr = rawEndStr ? rawEndStr.trim().split(/\s+/)[0] : ''
+      const start = parseVttTimeToSeconds(startStr)
+      const end = parseVttTimeToSeconds(endStr)
+
+      i++
+      const textLines: string[] = []
+      while (i < lines.length && lines[i].trim() !== '') {
+        const cleanText = lines[i].replace(/<[^>]+>/g, '').trim()
+        if (cleanText) textLines.push(cleanText)
+        i++
+      }
+      if (textLines.length > 0) {
+        cues.push({ start, end, text: textLines.join('\n') })
+      }
+    } else {
+      i++
+    }
+  }
+  return cues
+}
+
 interface VideoPlayerProps {
   item: JellyfinItem
   onClose: () => void
@@ -63,6 +114,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   const [subtitleStreams, setSubtitleStreams] = useState<JellyfinMediaStream[]>([])
   const [selectedAudioIndex, setSelectedAudioIndex] = useState<number | undefined>(undefined)
   const [selectedSubtitleIndex, setSelectedSubtitleIndex] = useState<number | undefined>(undefined)
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([])
+  const [activeSubtitleText, setActiveSubtitleText] = useState<string>('')
+  const [isSubtitleLoading, setIsSubtitleLoading] = useState<boolean>(false)
+  const [isAudioRemux, setIsAudioRemux] = useState<boolean>(false)
 
   // In-player Episodes drawer
   const [showEpisodesDrawer, setShowEpisodesDrawer] = useState(false)
@@ -94,6 +149,53 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       if (defAudio) setSelectedAudioIndex(defAudio.Index)
     }).catch(() => {})
   }, [item.Id, user])
+
+  // Zero-transcode WebVTT Subtitle loading effect
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    // Clean up any existing native tracks
+    while (video.getElementsByTagName('track').length > 0) {
+      video.removeChild(video.getElementsByTagName('track')[0])
+    }
+
+    if (selectedSubtitleIndex === undefined) {
+      setSubtitleCues([])
+      setActiveSubtitleText('')
+      return
+    }
+
+    const mediaSourceId = item.MediaSources?.[0]?.Id || item.Id
+    setIsSubtitleLoading(true)
+
+    jellyfinApi
+      .fetchSubtitleVtt(item.Id, mediaSourceId, selectedSubtitleIndex)
+      .then((vttText) => {
+        const cues = parseVtt(vttText)
+        setSubtitleCues(cues)
+        setIsSubtitleLoading(false)
+
+        // Dynamically attach native WebVTT track for native PiP & Fullscreen compatibility
+        try {
+          const blob = new Blob([vttText], { type: 'text/vtt' })
+          const blobUrl = URL.createObjectURL(blob)
+          const track = document.createElement('track')
+          track.kind = 'subtitles'
+          track.label = 'Subtitles'
+          track.srclang = 'en'
+          track.src = blobUrl
+          track.default = true
+          video.appendChild(track)
+        } catch {
+          // Fallback to React overlay only
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not fetch WebVTT subtitle directly:', err)
+        setIsSubtitleLoading(false)
+      })
+  }, [selectedSubtitleIndex, item.Id, item.MediaSources])
 
   // Load seasons and episodes if item is a series/episode
   useEffect(() => {
@@ -152,9 +254,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     [item.Id, selectedAudioIndex, selectedSubtitleIndex]
   )
 
-  // Start stream (Direct play with HLS fallback)
+  // Start stream (Direct play with Direct Stream Remux for alternate audio)
   const startStream = useCallback(
-    (useHls: boolean) => {
+    (useHls: boolean, audioIdx?: number, seekSeconds?: number) => {
       const video = videoRef.current
       if (!video) return
 
@@ -163,30 +265,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
         hlsRef.current = null
       }
 
-      const initialTicks = item.UserData?.PlaybackPositionTicks || 0
-      const initialSeconds = initialTicks / (1000 * 10000)
+      const currentAudio = audioIdx !== undefined ? audioIdx : selectedAudioIndex
+      const defaultAudio = audioStreams.find((s) => s.IsDefault) || audioStreams[0]
+      const isAlternateAudio = defaultAudio && currentAudio !== undefined && currentAudio !== defaultAudio.Index
 
-      if (!useHls) {
+      const targetSeconds =
+        seekSeconds !== undefined
+          ? seekSeconds
+          : video.currentTime > 0
+          ? video.currentTime
+          : (item.UserData?.PlaybackPositionTicks || 0) / (1000 * 10000)
+      const targetTicks = Math.floor(targetSeconds * 1000 * 10000)
+
+      if (!useHls && !isAlternateAudio) {
+        setIsAudioRemux(false)
         const directUrl = jellyfinApi.getDirectStreamUrl(item.Id)
         video.src = directUrl
 
         video.onloadedmetadata = () => {
-          if (initialSeconds > 0 && initialSeconds < (video.duration || 0) - 10) {
-            video.currentTime = initialSeconds
+          if (targetSeconds > 0 && targetSeconds < (video.duration || 0) - 10) {
+            video.currentTime = targetSeconds
           }
           video.play().catch(() => {})
         }
 
         video.onerror = () => {
-          console.warn('Direct Play failed. Falling back to Jellyfin HLS...')
+          console.warn('Direct Play failed. Falling back to Jellyfin Direct Stream Remux...')
           setIsHlsFallback(true)
-          startStream(true)
+          setIsAudioRemux(true)
+          startStream(true, currentAudio, video.currentTime || targetSeconds)
         }
       } else {
+        setIsAudioRemux(true)
         const hlsUrl = jellyfinApi.getHlsStreamUrl(item.Id, {
-          audioStreamIndex: selectedAudioIndex,
-          subtitleStreamIndex: selectedSubtitleIndex,
-          startTimeTicks: initialTicks,
+          audioStreamIndex: currentAudio,
+          videoCodec: 'copy', // Stream copy video (ZERO CPU/GPU transcoding!)
+          audioCodec: 'aac',
+          startTimeTicks: targetTicks,
         })
 
         if (Hls.isSupported()) {
@@ -223,12 +338,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
       jellyfinApi.reportPlaybackStart({
         ItemId: item.Id,
-        PositionTicks: initialTicks,
+        PositionTicks: targetTicks,
         IsPaused: false,
-        PlayMethod: useHls ? 'Transcode' : 'DirectPlay',
+        PlayMethod: useHls || isAlternateAudio ? 'DirectStream' : 'DirectPlay',
       })
     },
-    [item, selectedAudioIndex, selectedSubtitleIndex]
+    [item, selectedAudioIndex, audioStreams]
   )
 
   useEffect(() => {
@@ -345,7 +460,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     }
   }
 
-  // Chapter intro skip check & end-of-episode countdown check
+  // Chapter intro skip check, subtitle cue update & end-of-episode countdown check
   const handleTimeUpdate = () => {
     const video = videoRef.current
     if (!video) return
@@ -355,6 +470,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
     if (video.buffered.length > 0) {
       setBuffered(video.buffered.end(video.buffered.length - 1))
+    }
+
+    // Subtitle cue matching (0% CPU, instant text sync)
+    if (subtitleCues.length > 0) {
+      const active = subtitleCues.find((c) => cTime >= c.start && cTime <= c.end)
+      setActiveSubtitleText(active ? active.text : '')
+    } else if (activeSubtitleText) {
+      setActiveSubtitleText('')
     }
 
     // Check chapters for "Intro"
@@ -410,7 +533,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           })
           break
         case 'f':
-        case 'F':
+          case 'F':
           e.preventDefault()
           toggleFullscreen()
           break
@@ -462,6 +585,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
         onPause={() => setIsPlaying(false)}
         onClick={togglePlay}
       />
+
+      {/* Netflix-Style Subtitle Overlay (0% CPU, Native WebVTT render) */}
+      {activeSubtitleText && (
+        <div className="netflix-subtitle-overlay">
+          <div className="netflix-subtitle-text">{activeSubtitleText}</div>
+        </div>
+      )}
 
       {/* Animated Center Seek Ripple (+10 / -10) */}
       {seekFeedback && (
@@ -526,9 +656,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           </div>
           <div className="nerd-stat">
             <span>Stream Mode:</span>
-            <strong style={{ color: isHlsFallback ? '#ffaa00' : '#46d369' }}>
-              {isHlsFallback ? 'HLS Transcode (Universal)' : 'Direct Play (Native 0% CPU)'}
+            <strong style={{ color: isHlsFallback ? (isAudioRemux ? '#46d369' : '#ffaa00') : '#46d369' }}>
+              {isHlsFallback
+                ? (isAudioRemux ? 'Direct Stream Remux (Video Copy 0% CPU)' : 'HLS Transcode (Universal)')
+                : 'Direct Play (Native 0% CPU)'}
             </strong>
+          </div>
+          <div className="nerd-stat">
+            <span>Active Subtitle:</span>
+            <strong style={{ color: selectedSubtitleIndex !== undefined ? '#46d369' : '#888' }}>
+              {selectedSubtitleIndex !== undefined
+                ? `${subtitleStreams.find((s) => s.Index === selectedSubtitleIndex)?.DisplayTitle || 'Subtitle'} (WebVTT Direct 0% CPU)`
+                : 'Off'}
+            </strong>
+          </div>
+          <div className="nerd-stat">
+            <span>Active Audio:</span>
+            <span>
+              {audioStreams.find((a) => a.Index === selectedAudioIndex)?.DisplayTitle || 'Default Audio'} ({isAudioRemux ? 'Remux Copy' : 'Direct'})
+            </span>
           </div>
           <div className="nerd-stat">
             <span>Resolution:</span>
@@ -540,7 +686,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           </div>
           <div className="nerd-stat">
             <span>Audio Codec:</span>
-            <span>{audioStreams[0]?.Codec?.toUpperCase() || 'AAC'} ({audioStreams[0]?.Channels ? `${audioStreams[0].Channels}ch` : '2ch Stereo'})</span>
+            <span>{audioStreams.find((a) => a.Index === selectedAudioIndex)?.Codec?.toUpperCase() || 'AAC'} ({audioStreams.find((a) => a.Index === selectedAudioIndex)?.Channels ? `${audioStreams.find((a) => a.Index === selectedAudioIndex)?.Channels}ch` : '2ch Stereo'})</span>
           </div>
           <div className="nerd-stat">
             <span>Buffer Health:</span>
@@ -645,9 +791,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
                         key={a.Index}
                         className={`audio-sub-item ${isSelected ? 'selected' : ''}`}
                         onClick={() => {
+                          if (selectedAudioIndex === a.Index) return
                           setSelectedAudioIndex(a.Index)
-                          setIsHlsFallback(true)
-                          startStream(true)
+                          const defaultAudio = audioStreams.find((s) => s.IsDefault) || audioStreams[0]
+                          const isDefault = defaultAudio && a.Index === defaultAudio.Index
+                          const currentSec = videoRef.current?.currentTime || 0
+
+                          if (isDefault) {
+                            setIsHlsFallback(false)
+                            setIsAudioRemux(false)
+                            startStream(false, a.Index, currentSec)
+                          } else {
+                            setIsHlsFallback(true)
+                            setIsAudioRemux(true)
+                            startStream(true, a.Index, currentSec)
+                          }
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -663,7 +821,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
               {/* Right: Subtitles */}
               <div className="audio-sub-column">
-                <h4 className="audio-sub-col-title">Subtitles</h4>
+                <h4 className="audio-sub-col-title">
+                  Subtitles {isSubtitleLoading && <span style={{ fontSize: '0.8rem', color: '#E50914' }}>(Loading...)</span>}
+                </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <button
                     className={`audio-sub-item ${selectedSubtitleIndex === undefined ? 'selected' : ''}`}
@@ -679,21 +839,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
                   {subtitleStreams.map((s) => {
                     const isSelected = selectedSubtitleIndex === s.Index
+                    const isText = s.IsTextSubtitleStream !== false && s.Codec !== 'PGSSUB'
                     return (
                       <button
                         key={s.Index}
                         className={`audio-sub-item ${isSelected ? 'selected' : ''}`}
                         onClick={() => {
                           setSelectedSubtitleIndex(s.Index)
-                          setIsHlsFallback(true)
-                          startStream(true)
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           {isSelected ? <Check size={16} color="#E50914" /> : <div style={{ width: 16 }} />}
                           <span>{s.DisplayTitle || s.Language || `Subtitle ${s.Index}`}</span>
                         </div>
-                        {s.Codec && <span className="audio-badge">{s.Codec.toUpperCase()}</span>}
+                        <span className="audio-badge">
+                          {isText ? '0% CPU' : (s.Codec?.toUpperCase() || 'SUB')}
+                        </span>
                       </button>
                     )
                   })}

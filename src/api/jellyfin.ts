@@ -420,7 +420,7 @@ export class JellyfinApi {
     return `${apiBase}/Videos/${itemId}/stream?${params.toString()}`
   }
 
-  // HLS Universal Transcoding Master Stream URL
+  // HLS Remux / Stream URL (Defaults to VideoCodec=copy for zero server video CPU transcode)
   getHlsStreamUrl(
     itemId: string,
     options: {
@@ -428,23 +428,25 @@ export class JellyfinApi {
       audioStreamIndex?: number
       subtitleStreamIndex?: number
       startTimeTicks?: number
+      videoCodec?: string
+      audioCodec?: string
     } = {}
   ): string {
     const apiBase = this.getApiBase()
     const params = new URLSearchParams({
       DeviceId: this.deviceId,
       MediaSourceId: options.mediaSourceId || itemId,
-      VideoCodec: 'h264',
-      AudioCodec: 'aac,mp3',
+      VideoCodec: options.videoCodec || 'copy', // Copy video bitstream directly (0% CPU load)
+      AudioCodec: options.audioCodec || 'aac,mp3',
       TranscodingMaxAudioChannels: '2',
       SegmentContainer: 'ts',
       MinSegments: '2',
       BreakOnNonKeyFrames: 'true',
-      ManifestSubtitles: 'vtt',
     })
     if (options.audioStreamIndex !== undefined) {
       params.set('AudioStreamIndex', options.audioStreamIndex.toString())
     }
+    // Only pass SubtitleStreamIndex if explicit burn-in is requested (otherwise subtitles are external WebVTT)
     if (options.subtitleStreamIndex !== undefined) {
       params.set('SubtitleStreamIndex', options.subtitleStreamIndex.toString())
     }
@@ -463,6 +465,20 @@ export class JellyfinApi {
     const params = new URLSearchParams()
     if (this.token) params.set('api_key', this.token)
     return `${apiBase}/Videos/${itemId}/${mediaSourceId}/Subtitles/${index}/Stream.vtt?${params.toString()}`
+  }
+
+  // Fetch Subtitle WebVTT Content directly
+  async fetchSubtitleVtt(itemId: string, mediaSourceId: string, index: number): Promise<string> {
+    const url = this.getSubtitleUrl(itemId, mediaSourceId, index)
+    const response = await fetch(url, {
+      headers: {
+        Authorization: this.getAuthHeader(),
+      },
+    })
+    if (!response.ok) {
+      throw new Error(`Failed to load subtitle: HTTP ${response.status}`)
+    }
+    return await response.text()
   }
 }
 

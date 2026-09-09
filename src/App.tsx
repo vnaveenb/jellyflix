@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import type { JellyfinItem } from './types/jellyfin'
 import { jellyfinApi } from './api/jellyfin'
@@ -14,6 +14,7 @@ import { SeriesPage } from './pages/SeriesPage'
 import { MyListPage } from './pages/MyListPage'
 import { SearchPage } from './pages/SearchPage'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
+import { fuzzySearch } from './services/fuzzySearch'
 
 const MainApp: React.FC = () => {
   const { user, isLoading } = useAuth()
@@ -24,6 +25,13 @@ const MainApp: React.FC = () => {
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showServerModal, setShowServerModal] = useState(false)
   const [profileConfirmed, setProfileConfirmed] = useState(false)
+
+  // Warm up fuzzy search index when user is authenticated
+  useEffect(() => {
+    if (user) {
+      fuzzySearch.init(user.Id)
+    }
+  }, [user])
 
   // Keyboard navigation for TV remote / 10-foot UI
   useKeyboardNav({
@@ -183,6 +191,7 @@ const MainApp: React.FC = () => {
         {activeTab === 'search' && (
           <SearchPage
             searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
             onPlay={handlePlay}
             onMoreInfo={handleMoreInfo}
             onToggleFavorite={handleToggleFavorite}
