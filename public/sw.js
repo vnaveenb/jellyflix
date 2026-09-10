@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jellyflix-cache-v1'
+const CACHE_NAME = 'jellyflix-cache-v2'
 const OFFLINE_MEDIA_CACHE = 'jellyflix-downloads-v1'
 
 const PRECACHE_ASSETS = [
@@ -6,6 +6,7 @@ const PRECACHE_ASSETS = [
   '/index.html',
   '/manifest.webmanifest',
   '/favicon.svg',
+  '/favicon.png',
   '/icons.svg',
   '/icons/pwa-64x64.png',
   '/icons/pwa-144x144.png',
