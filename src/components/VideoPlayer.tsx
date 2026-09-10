@@ -18,10 +18,13 @@ import {
   PictureInPicture,
   Gauge,
   X,
+  Download,
+  CheckCircle2,
 } from 'lucide-react'
 import type { JellyfinItem, JellyfinMediaStream } from '../types/jellyfin'
 import { jellyfinApi } from '../api/jellyfin'
 import { useAuth } from '../context/AuthContext'
+import { useOffline } from '../context/OfflineContext'
 
 interface SubtitleCue {
   start: number
@@ -78,9 +81,12 @@ interface VideoPlayerProps {
   item: JellyfinItem
   onClose: () => void
   onNextEpisode?: (nextItem: JellyfinItem) => void
+  onToggleFavorite?: (item: JellyfinItem) => void
+  isOffline?: boolean
 }
 
-export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onClose }) => {
+export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onClose, isOffline = false }) => {
+  const { downloadItem, isDownloaded, isDownloading, getDownloadProgress } = useOffline()
   const { user, token } = useAuth()
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -286,7 +292,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
   const reportProgress = useCallback(
     (paused: boolean, eventName = 'TimeUpdate') => {
-      if (!videoRef.current) return
+      if (isOffline || !videoRef.current) return
       const currentSeconds = videoRef.current.currentTime
       const positionTicks = Math.floor(currentSeconds * 1000 * 10000)
 
@@ -327,6 +333,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           : video.currentTime > 0
           ? video.currentTime
           : (item.UserData?.PlaybackPositionTicks || 0) / (1000 * 10000)
+
+      // Offline playback directly from service worker cache
+      if (isOffline) {
+        setIsAudioRemux(false)
+        video.src = `/offline-video/${item.Id}`
+        video.onloadedmetadata = () => {
+          if (targetSeconds > 0 && targetSeconds < (video.duration || 0) - 10) {
+            video.currentTime = targetSeconds
+          }
+          video.play().catch(() => {})
+        }
+        return
+      }
 
       const container = (item.Container || item.MediaSources?.[0]?.Container || '').toLowerCase()
       const isDirectCompatible = (container === 'mp4' || container === 'm4v' || container === 'webm') && !isAlternateAudio && !useHls
@@ -1187,6 +1206,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
                   <button
                     className="player-btn"
+                    title={isDownloaded(item.Id) ? "Downloaded to Device" : "Download to Device"}
+                    onClick={() => {
+                      if (!isDownloaded(item.Id) && !isDownloading(item.Id)) {
+                        downloadItem(item)
+                      }
+                    }}
+                  >
+                    {isDownloaded(item.Id) ? (
+                      <CheckCircle2 size={22} color="#46d369" />
+                    ) : (
+                      <Download size={22} />
+                    )}
+                  </button>
+
+                  <button
+                    className="player-btn"
                     title="Stats for Nerds (S)"
                     style={{ color: showStatsForNerds ? '#E50914' : 'inherit' }}
                     onClick={() => setShowStatsForNerds(!showStatsForNerds)}
@@ -1271,6 +1306,35 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
                 <span>Next Ep</span>
               </button>
             )}
+
+            <button
+              className="yt-pill-btn"
+              onClick={safeTrigger(() => {
+                if (!isDownloaded(item.Id) && !isDownloading(item.Id)) {
+                  downloadItem(item)
+                }
+              })}
+              onTouchEnd={safeTrigger(() => {
+                if (!isDownloaded(item.Id) && !isDownloading(item.Id)) {
+                  downloadItem(item)
+                }
+              })}
+            >
+              {isDownloaded(item.Id) ? (
+                <CheckCircle2 size={16} color="#46d369" />
+              ) : isDownloading(item.Id) ? (
+                <Download size={16} color="#E50914" />
+              ) : (
+                <Download size={16} />
+              )}
+              <span>
+                {isDownloaded(item.Id)
+                  ? "Downloaded"
+                  : isDownloading(item.Id)
+                  ? `${getDownloadProgress(item.Id)}%`
+                  : "Download"}
+              </span>
+            </button>
 
             <button
               className="yt-pill-btn"

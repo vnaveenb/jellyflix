@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Search, Bell, User, Server, LogOut, Users, Download, X } from 'lucide-react'
+import { Search, Bell, User, Server, LogOut, Users, Download, X, Wifi, WifiOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useOffline } from '../context/OfflineContext'
 import { jellyfinApi } from '../api/jellyfin'
 import { usePWA } from '../hooks/usePWA'
 import { InstallPwaModal } from './InstallPwaModal'
@@ -25,6 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenServerSettings,
 }) => {
   const { user, logout } = useAuth()
+  const { isOfflineMode, toggleOfflineMode, downloads, activeDownloads } = useOffline()
   const {
     isInstalled,
     installApp,
@@ -126,11 +128,49 @@ export const Navbar: React.FC<NavbarProps> = ({
                   My List
                 </button>
               </li>
+              <li>
+                <button
+                  className={`nav-link ${activeTab === 'downloads' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('downloads')}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Download size={14} />
+                  <span>Downloads</span>
+                  {activeDownloads.length > 0 ? (
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#E50914' }} />
+                  ) : downloads.length > 0 ? (
+                    <span style={{ fontSize: '0.68rem', background: 'rgba(255,255,255,0.2)', padding: '1px 5px', borderRadius: 10 }}>{downloads.length}</span>
+                  ) : null}
+                </button>
+              </li>
             </ul>
           </nav>
         </div>
 
         <div className="navbar-right">
+          {/* Offline Mode Toggle Button */}
+          <button
+            onClick={toggleOfflineMode}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: isOfflineMode ? '#E50914' : 'rgba(255, 255, 255, 0.1)',
+              border: isOfflineMode ? '1px solid #E50914' : '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: 20,
+              padding: '5px 12px',
+              color: '#fff',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            title={isOfflineMode ? 'Offline Mode Enabled (Click to switch to Online)' : 'Click to Switch to Offline Mode'}
+          >
+            {isOfflineMode ? <WifiOff size={13} /> : <Wifi size={13} color="#46d369" />}
+            <span>{isOfflineMode ? 'Offline' : 'Online'}</span>
+          </button>
+
           {/* Desktop Search Bar */}
           <div className="search-container desktop-only-search">
             <Search size={18} className="search-icon" onClick={handleSearchToggle} />

@@ -424,6 +424,14 @@ export class JellyfinApi {
     return `${apiBase}/Users/${userId}/Images/Primary${query}`
   }
 
+  // Item Download URL (Raw original file from Jellyfin)
+  getItemDownloadUrl(itemId: string): string {
+    const apiBase = this.getApiBase()
+    const params = new URLSearchParams()
+    if (this.token) params.set('api_key', this.token)
+    return `${apiBase}/Items/${itemId}/Download?${params.toString()}`
+  }
+
   // Direct Play Stream URL
   getDirectStreamUrl(itemId: string, mediaSourceId?: string): string {
     const apiBase = this.getApiBase()

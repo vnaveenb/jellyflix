@@ -6,10 +6,13 @@ import {
   Check,
   Film,
   MoreHorizontal,
+  Download,
+  CheckCircle2,
 } from 'lucide-react'
 import type { JellyfinItem } from '../types/jellyfin'
 import { jellyfinApi } from '../api/jellyfin'
 import { useAuth } from '../context/AuthContext'
+import { useOffline } from '../context/OfflineContext'
 import { MediaManagerModal } from './MediaManagerModal'
 
 interface DetailModalProps {
@@ -30,6 +33,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
   onItemDeleted,
 }) => {
   const { user } = useAuth()
+  const { downloadItem, isDownloaded, isDownloading, getDownloadProgress } = useOffline()
   const [item, setItem] = useState<JellyfinItem>(initialItem)
   const [seasons, setSeasons] = useState<JellyfinItem[]>([])
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('')
@@ -158,6 +162,37 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                   <Check size={20} color={isPlayed ? '#46d369' : '#fff'} />
                   <span>{isPlayed ? 'Watched' : 'Mark Watched'}</span>
                 </button>
+
+                {/* Download Button for Offline Play */}
+                {!isSeries && (
+                  <button
+                    className="btn-info"
+                    onClick={() => {
+                      if (!isDownloaded(item.Id) && !isDownloading(item.Id)) {
+                        downloadItem(item)
+                      }
+                    }}
+                    title={isDownloaded(item.Id) ? "Downloaded for offline play" : "Download for offline play"}
+                    style={isDownloaded(item.Id) ? { color: "#46d369" } : {}}
+                  >
+                    {isDownloaded(item.Id) ? (
+                      <>
+                        <CheckCircle2 size={20} color="#46d369" />
+                        <span>Downloaded</span>
+                      </>
+                    ) : isDownloading(item.Id) ? (
+                      <>
+                        <Download size={20} color="#E50914" />
+                        <span>{getDownloadProgress(item.Id)}%</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download size={20} />
+                        <span>Download</span>
+                      </>
+                    )}
+                  </button>
+                )}
 
                 {/* Add to List */}
                 {onToggleFavorite && (
@@ -303,7 +338,35 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                           <div className="episode-details">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span className="episode-title">{ep.Name}</span>
-                              <span style={{ fontSize: '0.82rem', color: '#888' }}>{epRuntime}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ fontSize: '0.82rem', color: '#888' }}>{epRuntime}</span>
+                                <button
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: isDownloaded(ep.Id) ? '#46d369' : '#aaa',
+                                    cursor: 'pointer',
+                                    padding: 4,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (!isDownloaded(ep.Id) && !isDownloading(ep.Id)) {
+                                      downloadItem(ep)
+                                    }
+                                  }}
+                                  title={isDownloaded(ep.Id) ? 'Downloaded' : 'Download Episode'}
+                                >
+                                  {isDownloaded(ep.Id) ? (
+                                    <CheckCircle2 size={16} color="#46d369" />
+                                  ) : isDownloading(ep.Id) ? (
+                                    <span style={{ fontSize: '0.75rem', color: '#E50914', fontWeight: 700 }}>{getDownloadProgress(ep.Id)}%</span>
+                                  ) : (
+                                    <Download size={16} />
+                                  )}
+                                </button>
+                              </div>
                             </div>
                             <p className="episode-overview">{ep.Overview || 'No description available.'}</p>
                           </div>

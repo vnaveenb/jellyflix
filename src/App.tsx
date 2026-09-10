@@ -15,6 +15,8 @@ import { MoviesPage } from './pages/MoviesPage'
 import { SeriesPage } from './pages/SeriesPage'
 import { MyListPage } from './pages/MyListPage'
 import { SearchPage } from './pages/SearchPage'
+import { DownloadsPage } from './pages/DownloadsPage'
+import { OfflineProvider, useOffline } from './context/OfflineContext'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
 import { usePWA } from './hooks/usePWA'
 import { fuzzySearch } from './services/fuzzySearch'
@@ -22,9 +24,11 @@ import { fuzzySearch } from './services/fuzzySearch'
 const MainApp: React.FC = () => {
   const { user, isLoading } = useAuth()
   const { isInstalled, installApp } = usePWA()
-  const [activeTab, setActiveTab] = useState<'home' | 'series' | 'movies' | 'latest' | 'mylist' | 'search'>('home')
+  const { isOfflineMode, toggleOfflineMode, isNetworkOnline } = useOffline()
+  const [activeTab, setActiveTab] = useState<'home' | 'series' | 'movies' | 'latest' | 'mylist' | 'search' | 'downloads'>('home')
   const [searchQuery, setSearchQuery] = useState('')
   const [activeMediaItem, setActiveMediaItem] = useState<JellyfinItem | null>(null)
+  const [isOfflinePlayback, setIsOfflinePlayback] = useState(false)
   const [detailModalItem, setDetailModalItem] = useState<JellyfinItem | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showServerModal, setShowServerModal] = useState(false)
@@ -55,9 +59,10 @@ const MainApp: React.FC = () => {
     enabled: true,
   })
 
-  const handlePlay = async (item: JellyfinItem) => {
+  const handlePlay = async (item: JellyfinItem, isOffline: boolean = false) => {
     setDetailModalItem(null)
-    if (item.Type === 'Series' || item.Type === 'Season' || item.IsFolder) {
+    setIsOfflinePlayback(!!isOffline)
+    if (!isOffline && (item.Type === 'Series' || item.Type === 'Season' || item.IsFolder)) {
       if (user) {
         try {
           const seriesId = item.Type === 'Series' ? item.Id : (item.SeriesId || item.Id)
@@ -130,8 +135,26 @@ const MainApp: React.FC = () => {
     )
   }
 
-  // If no user or profile not confirmed yet, show "Who's watching?"
+  // If user is not logged in or offline without server, bypass to Downloads
   if (!user || !profileConfirmed) {
+    if (isOfflineMode || !isNetworkOnline) {
+      return (
+        <div className="app-container">
+          <DownloadsPage onPlay={(item) => handlePlay(item, true)} onMoreInfo={handleMoreInfo} />
+          {activeMediaItem && (
+            <VideoPlayer
+              item={activeMediaItem}
+              onClose={() => {
+                setActiveMediaItem(null)
+                setIsOfflinePlayback(false)
+              }}
+              onToggleFavorite={handleToggleFavorite}
+              isOffline={true}
+            />
+          )}
+        </div>
+      )
+    }
     return (
       <>
         <ProfilePicker
@@ -172,8 +195,51 @@ const MainApp: React.FC = () => {
         onOpenServerSettings={() => setShowServerModal(true)}
       />
 
+      {/* Offline Mode Alert Banner */}
+      {isOfflineMode && (
+        <div style={{
+          background: '#E50914',
+          color: '#fff',
+          padding: '8px 16px',
+          textAlign: 'center',
+          fontSize: '0.85rem',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+        }}>
+          <span>Offline Mode Active — Only downloaded content is shown</span>
+          <button
+            onClick={toggleOfflineMode}
+            style={{
+              background: '#fff',
+              color: '#E50914',
+              border: 'none',
+              borderRadius: 12,
+              padding: '2px 10px',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Go Online
+          </button>
+        </div>
+      )}
+
       <main style={{ flex: 1, paddingBottom: '70px' }}>
-        {activeTab === 'home' && (
+        {(isOfflineMode || activeTab === 'downloads') && (
+          <DownloadsPage
+            onPlay={(item) => handlePlay(item, true)}
+            onMoreInfo={handleMoreInfo}
+          />
+        )}
+
+        {!isOfflineMode && activeTab === 'home' && (
           <HomePage
             onPlay={handlePlay}
             onMoreInfo={handleMoreInfo}
@@ -182,7 +248,7 @@ const MainApp: React.FC = () => {
           />
         )}
 
-        {activeTab === 'movies' && (
+        {!isOfflineMode && activeTab === 'movies' && (
           <MoviesPage
             onPlay={handlePlay}
             onMoreInfo={handleMoreInfo}
@@ -190,7 +256,7 @@ const MainApp: React.FC = () => {
           />
         )}
 
-        {activeTab === 'series' && (
+        {!isOfflineMode && activeTab === 'series' && (
           <SeriesPage
             onPlay={handlePlay}
             onMoreInfo={handleMoreInfo}
@@ -198,7 +264,7 @@ const MainApp: React.FC = () => {
           />
         )}
 
-        {activeTab === 'latest' && (
+        {!isOfflineMode && activeTab === 'latest' && (
           <HomePage
             onPlay={handlePlay}
             onMoreInfo={handleMoreInfo}
@@ -206,7 +272,7 @@ const MainApp: React.FC = () => {
           />
         )}
 
-        {activeTab === 'mylist' && (
+        {!isOfflineMode && activeTab === 'mylist' && (
           <MyListPage
             onPlay={handlePlay}
             onMoreInfo={handleMoreInfo}
@@ -214,7 +280,7 @@ const MainApp: React.FC = () => {
           />
         )}
 
-        {activeTab === 'search' && (
+        {!isOfflineMode && activeTab === 'search' && (
           <SearchPage
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
@@ -259,7 +325,12 @@ const MainApp: React.FC = () => {
       {activeMediaItem && (
         <VideoPlayer
           item={activeMediaItem}
-          onClose={() => setActiveMediaItem(null)}
+          onClose={() => {
+            setActiveMediaItem(null)
+            setIsOfflinePlayback(false)
+          }}
+          onToggleFavorite={handleToggleFavorite}
+          isOffline={isOfflinePlayback}
         />
       )}
 
@@ -274,7 +345,9 @@ const MainApp: React.FC = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <MainApp />
+      <OfflineProvider>
+        <MainApp />
+      </OfflineProvider>
     </AuthProvider>
   )
 }
