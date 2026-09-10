@@ -14,6 +14,7 @@ interface NavbarProps {
   setSearchQuery: (query: string) => void
   onSwitchProfile: () => void
   onOpenServerSettings: () => void
+  onOpenAccount?: () => void
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -24,6 +25,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   setSearchQuery,
   onSwitchProfile,
   onOpenServerSettings,
+  onOpenAccount,
 }) => {
   const { user, logout } = useAuth()
   const { isOfflineMode, toggleOfflineMode, downloads, activeDownloads } = useOffline()
@@ -222,7 +224,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="user-menu" ref={menuRef}>
             <button
               className="user-avatar-btn"
-              onClick={() => setShowDropdown(!showDropdown)}
+              onClick={() => {
+                if (window.innerWidth <= 768 && onOpenAccount) {
+                  onOpenAccount()
+                } else {
+                  setShowDropdown(!showDropdown)
+                }
+              }}
               title={user?.Name || 'User'}
               aria-label="User menu"
             >
@@ -249,6 +257,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span>{user?.Name || 'Jellyfin User'}</span>
                 </div>
                 <div className="dropdown-divider" />
+                {onOpenAccount && (
+                  <button
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowDropdown(false)
+                      onOpenAccount()
+                    }}
+                  >
+                    <User size={16} color="#E50914" />
+                    <span>Account & Security</span>
+                  </button>
+                )}
                 <button
                   className="dropdown-item"
                   onClick={() => {

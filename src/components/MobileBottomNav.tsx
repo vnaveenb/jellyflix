@@ -1,5 +1,5 @@
 import React from 'react'
-import { Home, Tv, Film, Search, Download, Settings } from 'lucide-react'
+import { Home, Tv, Film, Search, Download, User } from 'lucide-react'
 import { useOffline } from '../context/OfflineContext'
 
 interface MobileBottomNavProps {
@@ -7,6 +7,7 @@ interface MobileBottomNavProps {
   setActiveTab: (tab: string) => void
   onOpenSearch: () => void
   onOpenSettings: () => void
+  onOpenAccount?: () => void
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
@@ -14,6 +15,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   setActiveTab,
   onOpenSearch,
   onOpenSettings,
+  onOpenAccount,
 }) => {
   const { downloads, activeDownloads } = useOffline()
 
@@ -90,11 +92,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
       <button
         className="mobile-nav-item"
-        onClick={onOpenSettings}
-        title="Settings & Servers"
+        onClick={onOpenAccount || onOpenSettings}
+        title="Account & Settings"
       >
-        <Settings size={20} />
-        <span>Settings</span>
+        <User size={20} />
+        <span>Account</span>
       </button>
     </nav>
   )

@@ -10,6 +10,7 @@ import { VideoPlayer } from './components/VideoPlayer'
 import { ProfilePicker } from './components/ProfilePicker'
 import { LoginModal } from './components/LoginModal'
 import { ServerConfigModal } from './components/ServerConfigModal'
+import { AccountModal } from './components/AccountModal'
 import { HomePage } from './pages/HomePage'
 import { MoviesPage } from './pages/MoviesPage'
 import { SeriesPage } from './pages/SeriesPage'
@@ -32,6 +33,7 @@ const MainApp: React.FC = () => {
   const [detailModalItem, setDetailModalItem] = useState<JellyfinItem | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showServerModal, setShowServerModal] = useState(false)
+  const [showAccountModal, setShowAccountModal] = useState(false)
 
   // Warm up fuzzy search index when user is authenticated
   useEffect(() => {
@@ -192,6 +194,7 @@ const MainApp: React.FC = () => {
         setSearchQuery={setSearchQuery}
         onSwitchProfile={() => setProfileConfirmed(false)}
         onOpenServerSettings={() => setShowServerModal(true)}
+        onOpenAccount={() => setShowAccountModal(true)}
       />
 
       {/* Offline Mode Alert Banner */}
@@ -299,6 +302,7 @@ const MainApp: React.FC = () => {
         }}
         onOpenSearch={() => setActiveTab('search')}
         onOpenSettings={() => setShowServerModal(true)}
+        onOpenAccount={() => setShowAccountModal(true)}
       />
 
       {/* Install PWA Prompt Banner for Mobile */}
@@ -336,6 +340,21 @@ const MainApp: React.FC = () => {
       {/* Server Config Modal */}
       {showServerModal && (
         <ServerConfigModal onClose={() => setShowServerModal(false)} />
+      )}
+
+      {/* Account & Security Modal */}
+      {showAccountModal && (
+        <AccountModal
+          onClose={() => setShowAccountModal(false)}
+          onOpenServerSettings={() => {
+            setShowAccountModal(false)
+            setShowServerModal(true)
+          }}
+          onSwitchProfile={() => {
+            setShowAccountModal(false)
+            setProfileConfirmed(false)
+          }}
+        />
       )}
     </div>
   )

@@ -139,6 +139,17 @@ export class JellyfinApi {
     return res
   }
 
+  // Update User Password
+  async updatePassword(userId: string, currentPw: string, newPw: string): Promise<void> {
+    await this.fetch(`/Users/Password?userId=${encodeURIComponent(userId)}`, {
+      method: "POST",
+      body: JSON.stringify({
+        CurrentPw: currentPw,
+        NewPw: newPw,
+      }),
+    })
+  }
+
   // Media Library Views (Movies, Shows, etc.)
   async getUserViews(userId: string): Promise<JellyfinItemsResponse> {
     return this.fetch<JellyfinItemsResponse>(`/Users/${userId}/Views`)
