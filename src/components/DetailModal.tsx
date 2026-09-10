@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react'
 import {
   X,
   Play,
-  Heart,
   Check,
   Film,
   MoreHorizontal,
   Download,
   CheckCircle2,
+  Plus,
+  ThumbsUp,
 } from 'lucide-react'
 import type { JellyfinItem } from '../types/jellyfin'
 import { jellyfinApi } from '../api/jellyfin'
@@ -70,7 +71,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
         setTrailers(localT)
 
         // Load similar recommendations
-        const similarRes = await jellyfinApi.getSimilarItems(item.Id, user.Id, 8)
+        const similarRes = await jellyfinApi.getSimilarItems(item.Id, user.Id, 10)
         setSimilarItems(similarRes.Items || [])
       } catch (err) {
         console.error('Failed to load item details:', err)
@@ -115,25 +116,48 @@ export const DetailModal: React.FC<DetailModalProps> = ({
     }
   }
 
+  // Format runtime ticks to "2h 15m" or "45m"
+  const formatDuration = (ticks?: number) => {
+    if (!ticks) return ''
+    const totalMinutes = Math.round(ticks / (10000 * 1000 * 60))
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`
+    }
+    return `${minutes}m`
+  }
+
+  // Extract Audio Languages
+  const audioLanguages = Array.from(
+    new Set(
+      item.MediaStreams?.filter((s) => s.Type === 'Audio' && (s.Language || s.DisplayTitle))
+        .map((s) => s.DisplayTitle || s.Language || '')
+        .filter(Boolean)
+        .slice(0, 5) || []
+    )
+  )
+
   // Backdrop image
   const backdropUrl = jellyfinApi.getImageUrl(item.Id, 'Backdrop', {
     maxWidth: 1280,
     quality: 85,
     tag: item.BackdropImageTags?.[0] || item.ImageTags?.Backdrop,
-  })
+  }) || jellyfinApi.getImageUrl(item.Id, 'Primary', { maxWidth: 800, quality: 85 })
 
-  const runtimeMinutes = item.RunTimeTicks ? Math.round(item.RunTimeTicks / (10000 * 1000 * 60)) : null
   const isFavorite = !!item.UserData?.IsFavorite
+  const runtimeFormatted = formatDuration(item.RunTimeTicks)
 
   return (
     <>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-          <button className="modal-close-btn" onClick={onClose} title="Close">
+          {/* Close Button Top-Right (Netflix style circle) */}
+          <button className="modal-close-btn" onClick={onClose} title="Close" aria-label="Close">
             <X size={20} />
           </button>
 
-          {/* Modal Banner */}
+          {/* Modal Hero / Backdrop Image */}
           <div
             className="modal-hero"
             style={{
@@ -141,131 +165,182 @@ export const DetailModal: React.FC<DetailModalProps> = ({
             }}
           >
             <div className="modal-hero-gradient" />
-            <div className="modal-hero-content">
+            <div className="modal-hero-title-container">
               <h2 className="modal-title">{item.Name}</h2>
-              <div className="hero-actions" style={{ flexWrap: 'wrap' }}>
-                <button
-                  className="btn-play"
-                  onClick={() => onPlay(item)}
-                >
-                  <Play size={20} fill="#000" />
-                  <span>Play</span>
-                </button>
-
-                {/* Mark Watched Toggle */}
-                <button
-                  className="btn-info"
-                  onClick={handleToggleWatched}
-                  title={isPlayed ? 'Mark as Unwatched' : 'Mark as Watched'}
-                  style={{ color: isPlayed ? '#46d369' : '#fff' }}
-                >
-                  <Check size={20} color={isPlayed ? '#46d369' : '#fff'} />
-                  <span>{isPlayed ? 'Watched' : 'Mark Watched'}</span>
-                </button>
-
-                {/* Download Button for Offline Play */}
-                {!isSeries && (
-                  <button
-                    className="btn-info"
-                    onClick={() => {
-                      if (!isDownloaded(item.Id) && !isDownloading(item.Id)) {
-                        downloadItem(item)
-                      }
-                    }}
-                    title={isDownloaded(item.Id) ? "Downloaded for offline play" : "Download for offline play"}
-                    style={isDownloaded(item.Id) ? { color: "#46d369" } : {}}
-                  >
-                    {isDownloaded(item.Id) ? (
-                      <>
-                        <CheckCircle2 size={20} color="#46d369" />
-                        <span>Downloaded</span>
-                      </>
-                    ) : isDownloading(item.Id) ? (
-                      <>
-                        <Download size={20} color="#E50914" />
-                        <span>{getDownloadProgress(item.Id)}%</span>
-                      </>
-                    ) : (
-                      <>
-                        <Download size={20} />
-                        <span>Download</span>
-                      </>
-                    )}
-                  </button>
-                )}
-
-                {/* Add to List */}
-                {onToggleFavorite && (
-                  <button
-                    className="btn-info"
-                    onClick={() => onToggleFavorite(item)}
-                    style={{ color: isFavorite ? '#E50914' : '#fff' }}
-                  >
-                    <Heart size={20} fill={isFavorite ? '#E50914' : 'none'} />
-                    <span>{isFavorite ? 'In My List' : 'Add to List'}</span>
-                  </button>
-                )}
-
-                {/* Trailer Preview Button */}
-                {(trailers.length > 0 || (item.RemoteTrailers && item.RemoteTrailers.length > 0)) && (
-                  <button
-                    className="btn-info"
-                    onClick={() => {
-                      if (trailers.length > 0) {
-                        setActiveTrailer(trailers[0])
-                      } else if (item.RemoteTrailers && item.RemoteTrailers[0]) {
-                        setActiveTrailer({ url: item.RemoteTrailers[0].Url })
-                      }
-                    }}
-                    title="Watch Trailer"
-                  >
-                    <Film size={20} />
-                    <span>Trailer</span>
-                  </button>
-                )}
-
-                {/* Manage Media Button */}
-                <button
-                  className="btn-info"
-                  onClick={() => setShowMediaManager(true)}
-                  title="Source File Info, Edit Metadata, Identify, Delete"
-                >
-                  <MoreHorizontal size={20} />
-                  <span>Manage Media</span>
-                </button>
-              </div>
             </div>
           </div>
+
+          {/* Action Row - Netflix Native Mobile & Desktop Layout */}
+          <div className="modal-header-actions">
+            {/* Primary Big White Play Pill */}
+            <button className="modal-primary-play-btn" onClick={() => onPlay(item)}>
+              <Play size={22} fill="#000" />
+              <span>{isSeries ? 'Play Next Episode' : 'Play'}</span>
+            </button>
+
+            {/* Circular Netflix Actions Row (Screenshot 4) */}
+            <div className="modal-actions-row">
+              {/* My List / Add */}
+              {onToggleFavorite && (
+                <button
+                  className="modal-action-btn"
+                  onClick={() => onToggleFavorite(item)}
+                  title={isFavorite ? 'In My List' : 'Add to My List'}
+                >
+                  <div className={`modal-action-circle ${isFavorite ? 'active-list' : ''}`}>
+                    {isFavorite ? <Check size={20} color="#E50914" strokeWidth={2.5} /> : <Plus size={20} />}
+                  </div>
+                  <span className="modal-action-label">{isFavorite ? 'In List' : 'My List'}</span>
+                </button>
+              )}
+
+              {/* Watched / Rate Toggle */}
+              <button
+                className="modal-action-btn"
+                onClick={handleToggleWatched}
+                title={isPlayed ? 'Mark as Unwatched' : 'Mark as Watched'}
+              >
+                <div className={`modal-action-circle ${isPlayed ? 'active-watched' : ''}`}>
+                  {isPlayed ? <Check size={20} color="#46d369" strokeWidth={2.5} /> : <ThumbsUp size={19} />}
+                </div>
+                <span className="modal-action-label" style={isPlayed ? { color: '#46d369' } : {}}>
+                  {isPlayed ? 'Watched' : 'Rate'}
+                </span>
+              </button>
+
+              {/* Download for Offline (Movies & standalone items) */}
+              {!isSeries && (
+                <button
+                  className="modal-action-btn"
+                  onClick={() => {
+                    if (!isDownloaded(item.Id) && !isDownloading(item.Id)) {
+                      downloadItem(item)
+                    }
+                  }}
+                  title={isDownloaded(item.Id) ? 'Downloaded to device' : 'Download for offline play'}
+                >
+                  <div className={`modal-action-circle ${isDownloaded(item.Id) ? 'active-download' : ''}`}>
+                    {isDownloaded(item.Id) ? (
+                      <CheckCircle2 size={20} color="#46d369" />
+                    ) : isDownloading(item.Id) ? (
+                      <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#E50914' }}>
+                        {getDownloadProgress(item.Id)}%
+                      </span>
+                    ) : (
+                      <Download size={19} />
+                    )}
+                  </div>
+                  <span className="modal-action-label" style={isDownloaded(item.Id) ? { color: '#46d369' } : {}}>
+                    {isDownloaded(item.Id)
+                      ? 'Saved'
+                      : isDownloading(item.Id)
+                      ? `${getDownloadProgress(item.Id)}%`
+                      : 'Download'}
+                  </span>
+                </button>
+              )}
+
+              {/* Trailer Preview Button */}
+              {(trailers.length > 0 || (item.RemoteTrailers && item.RemoteTrailers.length > 0)) && (
+                <button
+                  className="modal-action-btn"
+                  onClick={() => {
+                    if (trailers.length > 0) {
+                      setActiveTrailer(trailers[0])
+                    } else if (item.RemoteTrailers && item.RemoteTrailers[0]) {
+                      setActiveTrailer({ url: item.RemoteTrailers[0].Url })
+                    }
+                  }}
+                  title="Watch Official Trailer"
+                >
+                  <div className="modal-action-circle">
+                    <Film size={19} />
+                  </div>
+                  <span className="modal-action-label">Trailer</span>
+                </button>
+              )}
+
+              {/* Manage Media Button */}
+              <button
+                className="modal-action-btn"
+                onClick={() => setShowMediaManager(true)}
+                title="Source File Info, Edit Metadata, Identify, Delete"
+              >
+                <div className="modal-action-circle">
+                  <MoreHorizontal size={19} />
+                </div>
+                <span className="modal-action-label">Manage</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Active Trailer Player Embed */}
+          {activeTrailer && (
+            <div className="modal-trailer-container">
+              <div className="modal-trailer-header">
+                <span style={{ fontWeight: 700, fontSize: '0.92rem' }}>Official Trailer</span>
+                <button
+                  onClick={() => setActiveTrailer(null)}
+                  style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              {'url' in activeTrailer ? (
+                <iframe
+                  src={activeTrailer.url.replace('watch?v=', 'embed/')}
+                  title="Trailer"
+                  style={{ width: '100%', aspectRatio: '16/9', border: 'none', borderRadius: 8 }}
+                  allowFullScreen
+                />
+              ) : (
+                <video
+                  src={jellyfinApi.getDirectStreamUrl(activeTrailer.Id)}
+                  controls
+                  autoPlay
+                  style={{ width: '100%', aspectRatio: '16/9', borderRadius: 8 }}
+                />
+              )}
+            </div>
+          )}
 
           {/* Modal Body */}
           <div className="modal-body">
             <div className="modal-meta-grid">
-              <div>
-                <div className="hero-meta" style={{ marginBottom: 14 }}>
+              <div className="modal-meta-left">
+                {/* Netflix Meta Badges Row (Screenshot 4) */}
+                <div className="modal-meta-badges">
                   <span className="match-score">
-                    {item.CommunityRating ? `${Math.round(item.CommunityRating * 10)}% Match` : '97% Match'}
+                    {item.CommunityRating ? `${Math.round(item.CommunityRating * 10)}% Match` : '98% Match'}
                   </span>
-                  {item.ProductionYear && <span>{item.ProductionYear}</span>}
+                  {item.ProductionYear && <span className="meta-year">{item.ProductionYear}</span>}
                   {item.OfficialRating && <span className="rating-tag">{item.OfficialRating}</span>}
-                  {runtimeMinutes && <span>{runtimeMinutes}m</span>}
-                  {isSeries && <span>{seasons.length || 1} Season{seasons.length > 1 ? 's' : ''}</span>}
-                  {isPlayed && (
-                    <span style={{ color: '#46d369', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
-                      <Check size={14} /> Watched
-                    </span>
+                  {runtimeFormatted && <span className="meta-duration">{runtimeFormatted}</span>}
+                  <span className="quality-pill">HD</span>
+                  <span className="quality-pill">Spatial Audio</span>
+                  {isSeries && (
+                    <span className="meta-seasons">{seasons.length || 1} Season{seasons.length > 1 ? 's' : ''}</span>
                   )}
                 </div>
+
+                {/* Watch in Audio Languages Callout (Screenshot 4) */}
+                {audioLanguages.length > 0 && (
+                  <div className="modal-languages-callout">
+                    Watch in <strong>{audioLanguages.join(', ')}</strong>
+                  </div>
+                )}
 
                 <p className="modal-description">{item.Overview || 'No description available.'}</p>
               </div>
 
+              {/* Specs Column */}
               <div className="modal-specs">
                 {item.People && item.People.length > 0 && (
                   <div className="spec-item">
-                    <strong>Cast: </strong>
-                    <span>
+                    <strong className="spec-label">Cast: </strong>
+                    <span className="spec-val">
                       {item.People.filter((p) => p.Type === 'Actor')
-                        .slice(0, 4)
+                        .slice(0, 5)
                         .map((p) => p.Name)
                         .join(', ')}
                     </span>
@@ -274,25 +349,25 @@ export const DetailModal: React.FC<DetailModalProps> = ({
 
                 {item.Genres && item.Genres.length > 0 && (
                   <div className="spec-item">
-                    <strong>Genres: </strong>
-                    <span>{item.Genres.join(', ')}</span>
+                    <strong className="spec-label">Genres: </strong>
+                    <span className="spec-val">{item.Genres.join(', ')}</span>
                   </div>
                 )}
 
                 {item.Studios && item.Studios.length > 0 && (
                   <div className="spec-item">
-                    <strong>Studios: </strong>
-                    <span>{item.Studios.map((s) => s.Name).join(', ')}</span>
+                    <strong className="spec-label">Studios: </strong>
+                    <span className="spec-val">{item.Studios.map((s) => s.Name).join(', ')}</span>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Series Episodes Drawer */}
+            {/* Series Episodes Section */}
             {isSeries && seasons.length > 0 && (
               <div className="episodes-section">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Episodes</h3>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Episodes</h3>
                   <select
                     className="season-select"
                     value={selectedSeasonId}
@@ -309,16 +384,14 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                 {isLoadingEpisodes ? (
                   <div className="loading-spinner" />
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div className="episodes-list">
                     {episodes.map((ep, idx) => {
                       const epThumb = jellyfinApi.getImageUrl(ep.Id, 'Primary', {
-                        maxWidth: 300,
+                        maxWidth: 320,
                         quality: 80,
                         tag: ep.ImageTags?.Primary,
                       })
-                      const epRuntime = ep.RunTimeTicks
-                        ? `${Math.round(ep.RunTimeTicks / (10000 * 1000 * 60))}m`
-                        : ''
+                      const epDuration = formatDuration(ep.RunTimeTicks)
 
                       return (
                         <div
@@ -327,29 +400,24 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                           onClick={() => onPlay(ep)}
                         >
                           <span className="episode-num">{ep.IndexNumber ?? idx + 1}</span>
-                          <img
-                            src={epThumb}
-                            alt={ep.Name}
-                            className="episode-thumb"
-                            onError={(e) => {
-                              ;(e.target as HTMLElement).style.display = 'none'
-                            }}
-                          />
+                          <div className="episode-thumb-container">
+                            <img
+                              src={epThumb}
+                              alt={ep.Name}
+                              className="episode-thumb"
+                              onError={(e) => {
+                                ;(e.target as HTMLElement).style.display = 'none'
+                              }}
+                            />
+                            {epDuration && <span className="episode-thumb-duration">{epDuration}</span>}
+                          </div>
                           <div className="episode-details">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span className="episode-title">{ep.Name}</span>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <span style={{ fontSize: '0.82rem', color: '#888' }}>{epRuntime}</span>
+                                <span style={{ fontSize: '0.82rem', color: '#888' }}>{epDuration}</span>
                                 <button
-                                  style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: isDownloaded(ep.Id) ? '#46d369' : '#aaa',
-                                    cursor: 'pointer',
-                                    padding: 4,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                  }}
+                                  className="ep-download-btn"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     if (!isDownloaded(ep.Id) && !isDownloading(ep.Id)) {
@@ -361,7 +429,9 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                                   {isDownloaded(ep.Id) ? (
                                     <CheckCircle2 size={16} color="#46d369" />
                                   ) : isDownloading(ep.Id) ? (
-                                    <span style={{ fontSize: '0.75rem', color: '#E50914', fontWeight: 700 }}>{getDownloadProgress(ep.Id)}%</span>
+                                    <span style={{ fontSize: '0.75rem', color: '#E50914', fontWeight: 700 }}>
+                                      {getDownloadProgress(ep.Id)}%
+                                    </span>
                                   ) : (
                                     <Download size={16} />
                                   )}
@@ -378,57 +448,81 @@ export const DetailModal: React.FC<DetailModalProps> = ({
               </div>
             )}
 
-            {/* More Like This */}
+            {/* More Like This (Screenshot 4: 2-column on mobile, 3-column on desktop) */}
             {similarItems.length > 0 && (
-              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 20 }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: 16 }}>More Like This</h3>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                    gap: 16,
-                  }}
-                >
+              <div className="more-like-this-section">
+                <h3 className="more-like-title">More Like This</h3>
+                <div className="more-like-grid">
                   {similarItems.map((s) => {
-                    const sThumb = jellyfinApi.getImageUrl(s.Id, 'Primary', {
+                    const sThumb = jellyfinApi.getImageUrl(s.Id, 'Backdrop', {
+                      maxWidth: 420,
+                      quality: 80,
+                    }) || jellyfinApi.getImageUrl(s.Id, 'Primary', {
                       maxWidth: 350,
                       quality: 80,
                     })
+                    const sDuration = formatDuration(s.RunTimeTicks)
+
                     return (
                       <div
                         key={s.Id}
-                        style={{
-                          background: '#222',
-                          borderRadius: 6,
-                          overflow: 'hidden',
-                          cursor: 'pointer',
-                        }}
+                        className="more-like-card"
                         onClick={() => onPlay(s)}
                       >
-                        <div style={{ aspectRatio: '16/9', position: 'relative' }}>
+                        <div className="more-like-thumb-box">
                           <img
                             src={sThumb}
                             alt={s.Name}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                          <div
-                            style={{
-                              position: 'absolute',
-                              inset: 0,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              background: 'rgba(0,0,0,0.3)',
+                            className="more-like-thumb"
+                            onError={(e) => {
+                              const img = e.target as HTMLImageElement
+                              img.src = jellyfinApi.getImageUrl(s.Id, 'Primary', { maxWidth: 300, quality: 75 })
                             }}
-                          >
-                            <Play size={24} fill="#fff" />
+                          />
+                          {/* Duration Tag Top-Right on Thumbnail (Screenshot 4) */}
+                          {sDuration && (
+                            <span className="more-like-duration-tag">{sDuration}</span>
+                          )}
+                          <div className="more-like-play-overlay">
+                            <Play size={26} fill="#fff" />
                           </div>
                         </div>
-                        <div style={{ padding: 10 }}>
-                          <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>{s.Name}</div>
-                          <div style={{ fontSize: '0.75rem', color: '#888', marginTop: 4 }}>
-                            {s.ProductionYear}
+
+                        {/* Card Info Below Thumbnail */}
+                        <div className="more-like-body">
+                          <div className="more-like-row">
+                            <span className="more-like-name">{s.Name}</span>
+                            {onToggleFavorite && (
+                              <button
+                                className="more-like-fav-circle"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onToggleFavorite(s)
+                                }}
+                                title="Add to My List"
+                              >
+                                {s.UserData?.IsFavorite ? (
+                                  <Check size={14} color="#E50914" />
+                                ) : (
+                                  <Plus size={14} />
+                                )}
+                              </button>
+                            )}
                           </div>
+                          <div className="more-like-meta-line">
+                            {s.OfficialRating && (
+                              <span className="rating-tag" style={{ fontSize: '0.68rem', padding: '0 4px' }}>
+                                {s.OfficialRating}
+                              </span>
+                            )}
+                            <span className="quality-pill" style={{ fontSize: '0.68rem', padding: '0 4px' }}>HD</span>
+                            {s.ProductionYear && (
+                              <span style={{ fontSize: '0.78rem', color: '#888' }}>{s.ProductionYear}</span>
+                            )}
+                          </div>
+                          {s.Overview && (
+                            <p className="more-like-snippet">{s.Overview}</p>
+                          )}
                         </div>
                       </div>
                     )
@@ -440,38 +534,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
         </div>
       </div>
 
-      {/* Trailer Popup Player */}
-      {activeTrailer && (
-        <div className="modal-backdrop" style={{ zIndex: 600 }} onClick={() => setActiveTrailer(null)}>
-          <div
-            className="modal-content"
-            style={{ maxWidth: 880, background: '#000', padding: 10 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button className="modal-close-btn" onClick={() => setActiveTrailer(null)}>
-              <X size={18} />
-            </button>
-            {'Id' in activeTrailer ? (
-              <video
-                src={jellyfinApi.getDirectStreamUrl(activeTrailer.Id)}
-                controls
-                autoPlay
-                style={{ width: '100%', maxHeight: '75vh', borderRadius: 8 }}
-              />
-            ) : (
-              <iframe
-                src={activeTrailer.url.replace('watch?v=', 'embed/')}
-                title="Trailer"
-                style={{ width: '100%', height: '500px', border: 'none', borderRadius: 8 }}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Media Operations & File Info Modal */}
+      {/* Media Manager Modal */}
       {showMediaManager && (
         <MediaManagerModal
           item={item}
