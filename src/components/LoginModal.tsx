@@ -38,7 +38,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSuccess }) =>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.82rem', color: '#888' }}>
           <Server size={14} color="#E50914" />
-          <span>Server: {serverUrl}</span>
+          <span>Server: {serverUrl || 'Default (OMV Server)'}</span>
         </div>
 
         {error && (

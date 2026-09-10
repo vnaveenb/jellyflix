@@ -48,6 +48,35 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ onClose })
     }
   }
 
+  const handleResetDefault = async () => {
+    setUrlInput('')
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const ok = await setCustomServerUrl('')
+      if (ok) {
+        const info = await jellyfinApi.getPublicInfo()
+        setTestResult({
+          success: true,
+          serverName: info.ServerName || 'Jellyfin Server',
+          version: info.Version || '12.0.0',
+        })
+      } else {
+        setTestResult({
+          success: false,
+          error: 'Failed to connect to default built-in proxy.',
+        })
+      }
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        error: err.message || 'Connection failed',
+      })
+    } finally {
+      setTesting(false)
+    }
+  }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="auth-card" onClick={(e) => e.stopPropagation()}>
@@ -62,7 +91,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ onClose })
         </div>
 
         <p style={{ fontSize: '0.88rem', color: '#aaa', lineHeight: 1.5 }}>
-          Configure the address where your Jellyfin container is running on your OMV server.
+          By default, JellyFlix uses the built-in proxy (works seamlessly across Local Wi-Fi, Tailscale, and Remote access).
         </p>
 
         {testResult && (
@@ -96,25 +125,35 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ onClose })
 
         <form onSubmit={handleTestAndSave} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div className="form-group">
-            <label className="form-label">Server Address & Port</label>
+            <label className="form-label">Server Address (Optional override)</label>
             <input
               type="text"
               className="form-input"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
-              placeholder="e.g. http://localhost:8097"
-              required
+              placeholder="Leave empty for default built-in server"
             />
+            <span style={{ fontSize: '0.78rem', color: '#777', marginTop: 4, display: 'block' }}>
+              Current: {serverUrl ? serverUrl : 'Built-in Reverse Proxy (/jellyfin-api)'}
+            </span>
           </div>
 
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="submit"
               className="btn-primary-red"
               style={{ flex: 1 }}
-              disabled={testing || !urlInput.trim()}
+              disabled={testing}
             >
               {testing ? 'Testing...' : 'Save & Connect'}
+            </button>
+            <button
+              type="button"
+              className="btn-manage-profiles"
+              onClick={handleResetDefault}
+              disabled={testing}
+            >
+              Reset Default
             </button>
             <button type="button" className="btn-manage-profiles" onClick={onClose}>
               Done

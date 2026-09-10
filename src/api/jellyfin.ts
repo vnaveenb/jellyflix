@@ -26,7 +26,8 @@ export class JellyfinApi {
   private deviceId: string
 
   constructor(serverUrl?: string, token?: string | null) {
-    this.baseUrl = serverUrl || import.meta.env.VITE_JELLYFIN_URL || ''
+    const raw = serverUrl !== undefined ? serverUrl : (import.meta.env.VITE_JELLYFIN_URL || '')
+    this.baseUrl = raw.includes('localhost:8097') ? '' : raw.replace(/\/$/, '')
     this.token = token || null
     this.deviceId = getDeviceId()
   }
@@ -40,7 +41,8 @@ export class JellyfinApi {
   }
 
   public setServerUrl(url: string) {
-    this.baseUrl = url.replace(/\/$/, '')
+    const cleaned = url.trim().replace(/\/$/, '')
+    this.baseUrl = cleaned.includes('localhost:8097') ? '' : cleaned
   }
 
   public getServerUrl(): string {
@@ -49,14 +51,14 @@ export class JellyfinApi {
 
   /**
    * Determine API base path:
-   * If in browser and URL matches current origin or relative, use Vite proxy /jellyfin-api
+   * If a custom external URL was provided (e.g. https://my-server.com), use it.
+   * Otherwise, return same-origin relative proxy '/jellyfin-api'.
    */
   public getApiBase(): string {
-    // If running in development and baseUrl matches standard localhost:8097, use proxy to bypass CORS
-    if (import.meta.env.DEV) {
-      return '/jellyfin-api'
+    if (this.baseUrl && !this.baseUrl.includes('localhost:8097')) {
+      return this.baseUrl
     }
-    return this.baseUrl || '/jellyfin-api'
+    return '/jellyfin-api'
   }
 
   private getAuthHeader(): string {

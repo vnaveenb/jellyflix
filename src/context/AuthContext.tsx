@@ -18,14 +18,26 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-const DEFAULT_SERVER_URL = import.meta.env.VITE_JELLYFIN_URL || 'http://localhost:8097'
+const getInitialServerUrl = (): string => {
+  const saved = localStorage.getItem('jellyflix_server_url')
+  if (saved) {
+    if (saved.includes('localhost:8097')) {
+      localStorage.removeItem('jellyflix_server_url')
+      return ''
+    }
+    return saved
+  }
+  const envUrl = import.meta.env.VITE_JELLYFIN_URL || ''
+  if (envUrl && !envUrl.includes('localhost:8097')) {
+    return envUrl
+  }
+  return ''
+}
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<JellyfinUser | null>(null)
   const [token, setToken] = useState<string | null>(null)
-  const [serverUrl, setServerUrl] = useState<string>(() => {
-    return localStorage.getItem('jellyflix_server_url') || DEFAULT_SERVER_URL
-  })
+  const [serverUrl, setServerUrl] = useState<string>(getInitialServerUrl)
   const [savedUsers, setSavedUsers] = useState<JellyfinUser[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
@@ -121,12 +133,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const setCustomServerUrl = async (url: string): Promise<boolean> => {
     setIsLoading(true)
     setError(null)
-    const cleaned = url.replace(/\/$/, '')
+    const cleaned = url.trim().replace(/\/$/, '')
     try {
       jellyfinApi.setServerUrl(cleaned)
       await jellyfinApi.getPublicInfo()
       setServerUrl(cleaned)
-      localStorage.setItem('jellyflix_server_url', cleaned)
+      if (cleaned) {
+        localStorage.setItem('jellyflix_server_url', cleaned)
+      } else {
+        localStorage.removeItem('jellyflix_server_url')
+      }
 
       // Try fetching public users on new server
       const publicUsers = await jellyfinApi.getPublicUsers().catch(() => [])
