@@ -10,6 +10,7 @@ import {
   Film,
   Tv,
   CheckCircle2,
+  Pause,
 } from 'lucide-react'
 import { useOffline } from '../context/OfflineContext'
 import type { DownloadedItem } from '../services/downloadManager'
@@ -25,6 +26,8 @@ export const DownloadsPage: React.FC<DownloadsPageProps> = ({ onPlay }) => {
     downloads,
     activeDownloads,
     storage,
+    pauseDownload,
+    resumeDownload,
     cancelDownload,
     deleteDownload,
     isOfflineMode,
@@ -170,65 +173,125 @@ export const DownloadsPage: React.FC<DownloadsPageProps> = ({ onPlay }) => {
             Downloading ({activeDownloads.length})
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {activeDownloads.map((act) => (
-              <div
-                key={act.itemId}
-                style={{
-                  background: 'rgba(30, 30, 30, 0.95)',
-                  border: '1px solid rgba(229, 9, 20, 0.3)',
-                  borderRadius: 12,
-                  padding: '14px 18px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 16,
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{act.name}</span>
-                    <span style={{ fontSize: '0.8rem', color: '#aaa' }}>
-                      {act.loadedBytes > 0 && `${formatBytes(act.loadedBytes)} / `}
-                      {act.totalBytes > 0 ? formatBytes(act.totalBytes) : 'Calculating...'}
-                      {act.speed > 0 && ` • ${formatSpeed(act.speed)}`}
-                    </span>
-                  </div>
-                  <div style={{ height: 6, background: 'rgba(255, 255, 255, 0.15)', borderRadius: 3, overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        height: '100%',
-                        width: `${act.progress}%`,
-                        background: '#E50914',
-                        borderRadius: 3,
-                        transition: 'width 0.2s ease',
-                      }}
-                    />
-                  </div>
-                </div>
+            {activeDownloads.map((act) => {
+              const isPausedOrInterrupted = act.status === 'paused' || act.status === 'interrupted'
 
-                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#E50914', minWidth: 42 }}>
-                  {act.progress}%
-                </span>
-
-                <button
-                  onClick={() => cancelDownload(act.itemId)}
+              return (
+                <div
+                  key={act.itemId}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    border: 'none',
-                    color: '#ddd',
-                    borderRadius: '50%',
-                    width: 34,
-                    height: 34,
+                    background: 'rgba(30, 30, 30, 0.95)',
+                    border: isPausedOrInterrupted
+                      ? '1px solid rgba(255, 255, 255, 0.2)'
+                      : '1px solid rgba(229, 9, 20, 0.4)',
+                    borderRadius: 12,
+                    padding: '14px 18px',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
+                    gap: 16,
                   }}
-                  title="Cancel Download"
                 >
-                  <X size={18} />
-                </button>
-              </div>
-            ))}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{act.name}</span>
+                        {act.status === 'paused' && (
+                          <span style={{ fontSize: '0.72rem', background: '#d97706', color: '#fff', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                            Paused
+                          </span>
+                        )}
+                        {act.status === 'interrupted' && (
+                          <span style={{ fontSize: '0.72rem', background: '#4b5563', color: '#fff', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                            Interrupted
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: '0.8rem', color: '#aaa' }}>
+                        {act.loadedBytes > 0 && `${formatBytes(act.loadedBytes)} / `}
+                        {act.totalBytes > 0 ? formatBytes(act.totalBytes) : 'Calculating...'}
+                        {act.speed > 0 && ` • ${formatSpeed(act.speed)}`}
+                      </span>
+                    </div>
+                    <div style={{ height: 6, background: 'rgba(255, 255, 255, 0.15)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${act.progress}%`,
+                          background: isPausedOrInterrupted ? '#f59e0b' : '#E50914',
+                          borderRadius: 3,
+                          transition: 'width 0.2s ease',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem', color: isPausedOrInterrupted ? '#f59e0b' : '#E50914', minWidth: 42 }}>
+                    {act.progress}%
+                  </span>
+
+                  {/* Pause or Resume Button */}
+                  {isPausedOrInterrupted ? (
+                    <button
+                      onClick={() => resumeDownload(act.itemId)}
+                      style={{
+                        background: '#E50914',
+                        border: 'none',
+                        color: '#fff',
+                        borderRadius: '50%',
+                        width: 34,
+                        height: 34,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                      }}
+                      title="Resume Download"
+                    >
+                      <Play size={16} fill="#fff" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => pauseDownload(act.itemId)}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.12)',
+                        border: 'none',
+                        color: '#ddd',
+                        borderRadius: '50%',
+                        width: 34,
+                        height: 34,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                      }}
+                      title="Pause Download"
+                    >
+                      <Pause size={16} />
+                    </button>
+                  )}
+
+                  {/* Cancel / Delete Button */}
+                  <button
+                    onClick={() => cancelDownload(act.itemId)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: 'none',
+                      color: '#ddd',
+                      borderRadius: '50%',
+                      width: 34,
+                      height: 34,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                    }}
+                    title="Cancel Download"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

@@ -2699,6 +2699,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, .nav-item-focused {
   background: rgba(70, 211, 105, 0.18);
 }
 
+.modal-action-circle.active-paused {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.18);
+}
+
 .modal-action-label {
   font-size: 0.72rem;
   color: #aaa;

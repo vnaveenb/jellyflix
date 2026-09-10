@@ -22,7 +22,7 @@ import { usePWA } from './hooks/usePWA'
 import { fuzzySearch } from './services/fuzzySearch'
 
 const MainApp: React.FC = () => {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, isProfileConfirmed, setProfileConfirmed } = useAuth()
   const { isInstalled, installApp } = usePWA()
   const { isOfflineMode, toggleOfflineMode, isNetworkOnline } = useOffline()
   const [activeTab, setActiveTab] = useState<'home' | 'series' | 'movies' | 'latest' | 'mylist' | 'search' | 'downloads'>('home')
@@ -32,7 +32,6 @@ const MainApp: React.FC = () => {
   const [detailModalItem, setDetailModalItem] = useState<JellyfinItem | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showServerModal, setShowServerModal] = useState(false)
-  const [profileConfirmed, setProfileConfirmed] = useState(false)
 
   // Warm up fuzzy search index when user is authenticated
   useEffect(() => {
@@ -136,7 +135,7 @@ const MainApp: React.FC = () => {
   }
 
   // If user is not logged in or offline without server, bypass to Downloads
-  if (!user || !profileConfirmed) {
+  if (!user || !isProfileConfirmed) {
     if (isOfflineMode || !isNetworkOnline) {
       return (
         <div className="app-container">

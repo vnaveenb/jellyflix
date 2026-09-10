@@ -11,11 +11,14 @@ interface OfflineContextType {
   activeDownloads: ActiveDownload[]
   storage: { used: number; quota: number }
   downloadItem: (item: JellyfinItem) => Promise<void>
-  cancelDownload: (itemId: string) => void
+  pauseDownload: (itemId: string) => Promise<void>
+  resumeDownload: (itemId: string) => Promise<void>
+  cancelDownload: (itemId: string) => Promise<void>
   deleteDownload: (itemId: string) => Promise<void>
   isDownloaded: (itemId: string) => boolean
   isDownloading: (itemId: string) => boolean
   getDownloadProgress: (itemId: string) => number | null
+  getDownloadStatus: (itemId: string) => ActiveDownload['status'] | null
   refreshDownloads: () => Promise<void>
 }
 
@@ -84,8 +87,19 @@ export const OfflineProvider: React.FC<{ children: ReactNode }> = ({ children })
     await updateStorage()
   }
 
-  const cancelDownload = (itemId: string) => {
-    downloadManager.cancelDownload(itemId)
+  const pauseDownload = async (itemId: string) => {
+    await downloadManager.pauseDownload(itemId)
+    await updateStorage()
+  }
+
+  const resumeDownload = async (itemId: string) => {
+    await downloadManager.resumeDownload(itemId)
+    await updateStorage()
+  }
+
+  const cancelDownload = async (itemId: string) => {
+    await downloadManager.cancelDownload(itemId)
+    await updateStorage()
   }
 
   const deleteDownload = async (itemId: string) => {
@@ -106,6 +120,11 @@ export const OfflineProvider: React.FC<{ children: ReactNode }> = ({ children })
     return active ? active.progress : null
   }
 
+  const getDownloadStatus = (itemId: string): ActiveDownload['status'] | null => {
+    const active = activeDownloads.find((a) => a.itemId === itemId)
+    return active ? active.status : null
+  }
+
   const refreshDownloads = async () => {
     const items = await downloadManager.getAllDownloads()
     setDownloads(items)
@@ -123,11 +142,14 @@ export const OfflineProvider: React.FC<{ children: ReactNode }> = ({ children })
         activeDownloads,
         storage,
         downloadItem,
+        pauseDownload,
+        resumeDownload,
         cancelDownload,
         deleteDownload,
         isDownloaded,
         isDownloading,
         getDownloadProgress,
+        getDownloadStatus,
         refreshDownloads,
       }}
     >
@@ -136,7 +158,7 @@ export const OfflineProvider: React.FC<{ children: ReactNode }> = ({ children })
   )
 }
 
-export const useOffline = () => {
+export const useOffline = (): OfflineContextType => {
   const context = useContext(OfflineContext)
   if (!context) {
     throw new Error('useOffline must be used within an OfflineProvider')

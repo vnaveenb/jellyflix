@@ -34,7 +34,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
   onItemDeleted,
 }) => {
   const { user } = useAuth()
-  const { downloadItem, isDownloaded, isDownloading, getDownloadProgress } = useOffline()
+  const { downloadItem, resumeDownload, pauseDownload, isDownloaded, isDownloading, getDownloadProgress, getDownloadStatus } = useOffline()
   const [item, setItem] = useState<JellyfinItem>(initialItem)
   const [seasons, setSeasons] = useState<JellyfinItem[]>([])
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('')
@@ -209,36 +209,70 @@ export const DetailModal: React.FC<DetailModalProps> = ({
               </button>
 
               {/* Download for Offline (Movies & standalone items) */}
-              {!isSeries && (
-                <button
-                  className="modal-action-btn"
-                  onClick={() => {
-                    if (!isDownloaded(item.Id) && !isDownloading(item.Id)) {
-                      downloadItem(item)
+              {!isSeries && (() => {
+                const itemStatus = getDownloadStatus(item.Id)
+                const itemProgress = getDownloadProgress(item.Id)
+                const isPaused = itemStatus === 'paused' || itemStatus === 'interrupted'
+
+                return (
+                  <button
+                    className="modal-action-btn"
+                    onClick={() => {
+                      if (isDownloaded(item.Id)) return
+                      if (isDownloading(item.Id)) {
+                        pauseDownload(item.Id)
+                      } else if (isPaused) {
+                        resumeDownload(item.Id)
+                      } else {
+                        downloadItem(item)
+                      }
+                    }}
+                    title={
+                      isDownloaded(item.Id)
+                        ? 'Downloaded to device'
+                        : isDownloading(item.Id)
+                        ? 'Click to pause download'
+                        : isPaused
+                        ? 'Click to resume download'
+                        : 'Download for offline play'
                     }
-                  }}
-                  title={isDownloaded(item.Id) ? 'Downloaded to device' : 'Download for offline play'}
-                >
-                  <div className={`modal-action-circle ${isDownloaded(item.Id) ? 'active-download' : ''}`}>
-                    {isDownloaded(item.Id) ? (
-                      <CheckCircle2 size={20} color="#46d369" />
-                    ) : isDownloading(item.Id) ? (
-                      <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#E50914' }}>
-                        {getDownloadProgress(item.Id)}%
-                      </span>
-                    ) : (
-                      <Download size={19} />
-                    )}
-                  </div>
-                  <span className="modal-action-label" style={isDownloaded(item.Id) ? { color: '#46d369' } : {}}>
-                    {isDownloaded(item.Id)
-                      ? 'Saved'
-                      : isDownloading(item.Id)
-                      ? `${getDownloadProgress(item.Id)}%`
-                      : 'Download'}
-                  </span>
-                </button>
-              )}
+                  >
+                    <div className={`modal-action-circle ${isDownloaded(item.Id) ? 'active-download' : isPaused ? 'active-paused' : ''}`}>
+                      {isDownloaded(item.Id) ? (
+                        <CheckCircle2 size={20} color="#46d369" />
+                      ) : isDownloading(item.Id) ? (
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#E50914' }}>
+                          {itemProgress}%
+                        </span>
+                      ) : isPaused ? (
+                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#f59e0b' }}>
+                          {itemProgress}%
+                        </span>
+                      ) : (
+                        <Download size={19} />
+                      )}
+                    </div>
+                    <span
+                      className="modal-action-label"
+                      style={
+                        isDownloaded(item.Id)
+                          ? { color: '#46d369' }
+                          : isPaused
+                          ? { color: '#f59e0b' }
+                          : {}
+                      }
+                    >
+                      {isDownloaded(item.Id)
+                        ? 'Saved'
+                        : isDownloading(item.Id)
+                        ? `${itemProgress}%`
+                        : isPaused
+                        ? 'Resume'
+                        : 'Download'}
+                    </span>
+                  </button>
+                )
+              })()}
 
               {/* Trailer Preview Button */}
               {(trailers.length > 0 || (item.RemoteTrailers && item.RemoteTrailers.length > 0)) && (
