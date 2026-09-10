@@ -1,12 +1,23 @@
 import React, { useEffect } from 'react'
-import { X, Share2, PlusSquare, Sparkles } from 'lucide-react'
+import { X, Share2, PlusSquare, Download, MoreVertical, Smartphone } from 'lucide-react'
 
 interface InstallPwaModalProps {
   isOpen: boolean
   onClose: () => void
+  onInstallDirect?: () => void
+  hasNativePrompt?: boolean
+  isIOS?: boolean
+  isAndroid?: boolean
 }
 
-export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({ isOpen, onClose }) => {
+export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({
+  isOpen,
+  onClose,
+  onInstallDirect,
+  hasNativePrompt,
+  isIOS,
+  isAndroid,
+}) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -25,7 +36,7 @@ export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({ isOpen, onClos
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
         backdropFilter: 'blur(8px)',
         zIndex: 1000,
         display: 'flex',
@@ -40,7 +51,7 @@ export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({ isOpen, onClos
       <div
         style={{
           background: 'linear-gradient(180deg, #1f1f1f 0%, #141414 100%)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
           borderRadius: '16px',
           width: '100%',
           maxWidth: '440px',
@@ -69,143 +80,188 @@ export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({ isOpen, onClos
             cursor: 'pointer',
             transition: 'background 0.2s',
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)')}
         >
           <X size={18} />
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '1.25rem' }}>
           <img
             src="/icons/pwa-192x192.png"
             alt="JellyFlix"
-            style={{ width: '48px', height: '48px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
+            style={{ width: '52px', height: '52px', borderRadius: '14px', boxShadow: '0 4px 14px rgba(0,0,0,0.6)' }}
           />
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>Install JellyFlix</h3>
-            <p style={{ margin: '2px 0 0', fontSize: '0.825rem', color: '#aaaaaa' }}>Add to your Apple device</p>
+            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Install JellyFlix</h3>
+            <p style={{ margin: '2px 0 0', fontSize: '0.85rem', color: '#aaaaaa' }}>
+              {isIOS ? 'Add to iPhone / iPad' : isAndroid ? 'Add to Android Device' : 'Install Desktop App'}
+            </p>
           </div>
         </div>
 
         <p style={{ fontSize: '0.9rem', color: '#cccccc', lineHeight: 1.5, marginBottom: '1.25rem' }}>
-          Install JellyFlix on your iPhone or iPad home screen for fullscreen playback, faster loading, and an app-like
-          experience:
+          Install JellyFlix for full screen cinema playback, faster load times, and an ad-free app experience.
         </p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '1.5rem' }}>
-          <div
+        {/* Direct One-Click Install Button if browser prompt is ready */}
+        {hasNativePrompt && (
+          <button
+            onClick={() => {
+              if (onInstallDirect) onInstallDirect()
+            }}
             style={{
+              width: '100%',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px',
-              padding: '10px 14px',
-              background: 'rgba(255, 255, 255, 0.05)',
+              justifyContent: 'center',
+              gap: '10px',
+              background: '#E50914',
+              color: '#ffffff',
+              border: 'none',
               borderRadius: '10px',
-              border: '1px solid rgba(255, 255, 255, 0.06)',
+              padding: '12px 18px',
+              fontSize: '1rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              marginBottom: '1.25rem',
+              boxShadow: '0 4px 16px rgba(229, 9, 20, 0.4)',
             }}
           >
+            <Download size={20} />
+            <span>Install Now</span>
+          </button>
+        )}
+
+        {/* iOS Step-by-Step */}
+        {isIOS ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                background: 'rgba(229, 9, 20, 0.2)',
-                color: '#E50914',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
+                gap: '12px',
+                padding: '10px 14px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
               }}
             >
-              <Share2 size={18} />
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  background: 'rgba(229, 9, 20, 0.2)',
+                  color: '#E50914',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Share2 size={18} />
+              </div>
+              <div style={{ fontSize: '0.875rem' }}>
+                <strong>Step 1:</strong> Tap the <strong>Share</strong> button in Safari toolbar.
+              </div>
             </div>
-            <div style={{ fontSize: '0.875rem' }}>
-              <strong>Step 1:</strong> Tap the <strong>Share</strong> button in Safari toolbar.
-            </div>
-          </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '10px 14px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: '10px',
-              border: '1px solid rgba(255, 255, 255, 0.06)',
-            }}
-          >
             <div
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                background: 'rgba(229, 9, 20, 0.2)',
-                color: '#E50914',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
+                gap: '12px',
+                padding: '10px 14px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
               }}
             >
-              <PlusSquare size={18} />
-            </div>
-            <div style={{ fontSize: '0.875rem' }}>
-              <strong>Step 2:</strong> Scroll down and select <strong>Add to Home Screen</strong>.
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  background: 'rgba(229, 9, 20, 0.2)',
+                  color: '#E50914',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <PlusSquare size={18} />
+              </div>
+              <div style={{ fontSize: '0.875rem' }}>
+                <strong>Step 2:</strong> Scroll down and select <strong>Add to Home Screen</strong>.
+              </div>
             </div>
           </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '10px 14px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: '10px',
-              border: '1px solid rgba(255, 255, 255, 0.06)',
-            }}
-          >
+        ) : (
+          /* Android & Desktop Manual Guide */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                background: 'rgba(229, 9, 20, 0.2)',
-                color: '#E50914',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
+                gap: '12px',
+                padding: '10px 14px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
               }}
             >
-              <Sparkles size={18} />
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  background: 'rgba(229, 9, 20, 0.2)',
+                  color: '#E50914',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <MoreVertical size={18} />
+              </div>
+              <div style={{ fontSize: '0.875rem' }}>
+                <strong>Step 1:</strong> Tap the <strong>three dots (⋮)</strong> menu in Chrome or your browser.
+              </div>
             </div>
-            <div style={{ fontSize: '0.875rem' }}>
-              <strong>Step 3:</strong> Tap <strong>Add</strong> in the top-right corner to finish.
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '10px 14px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+              }}
+            >
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  background: 'rgba(229, 9, 20, 0.2)',
+                  color: '#E50914',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Smartphone size={18} />
+              </div>
+              <div style={{ fontSize: '0.875rem' }}>
+                <strong>Step 2:</strong> Tap <strong>&quot;Install app&quot;</strong> or <strong>&quot;Add to Home screen&quot;</strong>.
+              </div>
             </div>
           </div>
-        </div>
-
-        <button
-          onClick={onClose}
-          style={{
-            width: '100%',
-            padding: '12px',
-            backgroundColor: '#E50914',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '8px',
-            fontWeight: 600,
-            fontSize: '0.95rem',
-            cursor: 'pointer',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f40612')}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#E50914')}
-        >
-          Got it
-        </button>
+        )}
       </div>
     </div>
   )

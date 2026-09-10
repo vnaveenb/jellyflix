@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 
-interface BeforeInstallPromptEvent extends Event {
+export interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[]
   readonly userChoice: Promise<{
     outcome: 'accepted' | 'dismissed'
@@ -9,20 +9,32 @@ interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>
 }
 
-export function usePWA() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
-  const [isInstalled, setIsInstalled] = useState(false)
-  const [isOnline, setIsOnline] = useState(navigator.onLine)
-  const [showIOSGuide, setShowIOSGuide] = useState(false)
+declare global {
+  interface Window {
+    __deferredPrompt?: BeforeInstallPromptEvent | null
+  }
+}
 
-  // Detect iOS platform
+export function usePWA() {
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(
+    typeof window !== 'undefined' && window.__deferredPrompt ? window.__deferredPrompt : null
+  )
+  const [isInstalled, setIsInstalled] = useState(false)
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
+  const [showInstallModal, setShowInstallModal] = useState(false)
+
+  // Detect platform
   const isIOS =
     typeof window !== 'undefined' &&
     /iPad|iPhone|iPod/.test(navigator.userAgent) &&
     !(window as unknown as { MSStream?: unknown }).MSStream
 
+  const isAndroid =
+    typeof window !== 'undefined' && /Android/i.test(navigator.userAgent)
+
   // Check standalone mode
   const checkIsInstalled = useCallback(() => {
+    if (typeof window === 'undefined') return
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (navigator as unknown as { standalone?: boolean }).standalone === true ||
@@ -34,19 +46,17 @@ export function usePWA() {
   useEffect(() => {
     checkIsInstalled()
 
-    // 1. Register Service Worker
-    if ('serviceWorker' in navigator && import.meta.env.MODE !== 'test') {
-      window.addEventListener('load', () => {
+    // 1. Immediately register Service Worker
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env.MODE !== 'test') {
+      const registerSW = () => {
         navigator.serviceWorker
           .register('/sw.js')
           .then((registration) => {
-            // Check for updates periodically
             registration.onupdatefound = () => {
               const installingWorker = registration.installing
               if (installingWorker) {
                 installingWorker.onstatechange = () => {
                   if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    // New content is available, service worker ready
                     console.log('[PWA] New version installed and active.')
                   }
                 }
@@ -56,20 +66,34 @@ export function usePWA() {
           .catch((err) => {
             console.warn('[PWA] Service Worker registration failed:', err)
           })
-      })
+      }
+
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        registerSW()
+      } else {
+        window.addEventListener('load', registerSW)
+      }
     }
 
     // 2. Intercept BeforeInstallPrompt for Android & Windows / Chrome / Edge
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault()
-      setDeferredPrompt(e as BeforeInstallPromptEvent)
+      const pEvent = e as BeforeInstallPromptEvent
+      window.__deferredPrompt = pEvent
+      setDeferredPrompt(pEvent)
+    }
+
+    // Also check if already saved in window
+    if (window.__deferredPrompt) {
+      setDeferredPrompt(window.__deferredPrompt)
     }
 
     // 3. App Installed event
     const handleAppInstalled = () => {
       setIsInstalled(true)
       setDeferredPrompt(null)
-      setShowIOSGuide(false)
+      window.__deferredPrompt = null
+      setShowInstallModal(false)
       console.log('[PWA] JellyFlix successfully installed.')
     }
 
@@ -91,27 +115,35 @@ export function usePWA() {
   }, [checkIsInstalled])
 
   const installApp = async () => {
-    if (deferredPrompt) {
-      // Trigger native browser install prompt (Android, Windows, Chrome, Edge)
-      await deferredPrompt.prompt()
-      const { outcome } = await deferredPrompt.userChoice
-      if (outcome === 'accepted') {
-        setIsInstalled(true)
+    const promptEvent = deferredPrompt || window.__deferredPrompt
+    if (promptEvent) {
+      try {
+        await promptEvent.prompt()
+        const { outcome } = await promptEvent.userChoice
+        if (outcome === 'accepted') {
+          setIsInstalled(true)
+        }
+        setDeferredPrompt(null)
+        window.__deferredPrompt = null
+      } catch (err) {
+        console.warn('[PWA] Install prompt failed:', err)
+        setShowInstallModal(true)
       }
-      setDeferredPrompt(null)
-    } else if (isIOS && !isInstalled) {
-      // On iOS Safari, show the interactive step-by-step guidance
-      setShowIOSGuide(true)
+    } else {
+      // If native prompt not directly dispatched yet, show guided modal
+      setShowInstallModal(true)
     }
   }
 
   return {
-    canInstall: !isInstalled && (!!deferredPrompt || isIOS),
+    canInstall: !isInstalled,
+    hasNativePrompt: !!deferredPrompt || !!window.__deferredPrompt,
     isInstalled,
     isOnline,
     isIOS,
-    showIOSGuide,
-    setShowIOSGuide,
+    isAndroid,
+    showInstallModal,
+    setShowInstallModal,
     installApp,
   }
 }

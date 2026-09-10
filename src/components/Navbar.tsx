@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Search, Bell, User, Server, LogOut, Users, Download } from 'lucide-react'
+import { Search, Bell, User, Server, LogOut, Users, Download, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { jellyfinApi } from '../api/jellyfin'
 import { usePWA } from '../hooks/usePWA'
@@ -25,11 +25,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenServerSettings,
 }) => {
   const { user, logout } = useAuth()
-  const { isInstalled, installApp, showIOSGuide, setShowIOSGuide } = usePWA()
+  const {
+    isInstalled,
+    installApp,
+    showInstallModal,
+    setShowInstallModal,
+    hasNativePrompt,
+    isIOS,
+    isAndroid,
+  } = usePWA()
   const [isScrolled, setIsScrolled] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const mobileInputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -51,8 +60,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, [])
 
   const handleSearchToggle = () => {
-    if (!searchOpen) {
-      setSearchOpen(true)
+    if (window.innerWidth <= 768) {
+      setMobileSearchOpen(!mobileSearchOpen)
+      if (!mobileSearchOpen) {
+        onOpenSearch()
+        setTimeout(() => mobileInputRef.current?.focus(), 150)
+      }
+    } else {
       onOpenSearch()
       setTimeout(() => searchInputRef.current?.focus(), 100)
     }
@@ -63,176 +77,224 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       <header className={`navbar ${isScrolled ? 'scrolled' : 'transparent'}`}>
-      <div className="navbar-left">
-        <a href="#home" className="brand-logo" onClick={() => setActiveTab('home')}>
-          <span>JELLYFLIX</span>
-          <span className="brand-badge">OMV</span>
-        </a>
+        <div className="navbar-left">
+          <a href="#home" className="brand-logo" onClick={() => setActiveTab('home')}>
+            <span>JELLYFLIX</span>
+            <span className="brand-badge">OMV</span>
+          </a>
 
-        <nav>
-          <ul className="nav-links">
-            <li>
-              <button
-                className={`nav-link ${activeTab === 'home' ? 'active' : ''}`}
-                onClick={() => setActiveTab('home')}
-              >
-                Home
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-link ${activeTab === 'series' ? 'active' : ''}`}
-                onClick={() => setActiveTab('series')}
-              >
-                TV Shows
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-link ${activeTab === 'movies' ? 'active' : ''}`}
-                onClick={() => setActiveTab('movies')}
-              >
-                Movies
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-link ${activeTab === 'latest' ? 'active' : ''}`}
-                onClick={() => setActiveTab('latest')}
-              >
-                New & Popular
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-link ${activeTab === 'mylist' ? 'active' : ''}`}
-                onClick={() => setActiveTab('mylist')}
-              >
-                My List
-              </button>
-            </li>
-          </ul>
-        </nav>
-      </div>
-
-      <div className="navbar-right">
-        {/* Search */}
-        <div className="search-container">
-          <Search size={18} className="search-icon" onClick={handleSearchToggle} />
-          <input
-            ref={searchInputRef}
-            type="text"
-            className="search-input"
-            placeholder="Titles, people, genres..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value)
-              if (activeTab !== 'search') onOpenSearch()
-            }}
-            onFocus={() => {
-              if (activeTab !== 'search') onOpenSearch()
-            }}
-          />
+          {/* Desktop Navigation Links (Hidden on Mobile) */}
+          <nav className="desktop-nav">
+            <ul className="nav-links">
+              <li>
+                <button
+                  className={`nav-link ${activeTab === 'home' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('home')}
+                >
+                  Home
+                </button>
+              </li>
+              <li>
+                <button
+                  className={`nav-link ${activeTab === 'series' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('series')}
+                >
+                  TV Shows
+                </button>
+              </li>
+              <li>
+                <button
+                  className={`nav-link ${activeTab === 'movies' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('movies')}
+                >
+                  Movies
+                </button>
+              </li>
+              <li>
+                <button
+                  className={`nav-link ${activeTab === 'latest' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('latest')}
+                >
+                  New & Popular
+                </button>
+              </li>
+              <li>
+                <button
+                  className={`nav-link ${activeTab === 'mylist' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('mylist')}
+                >
+                  My List
+                </button>
+              </li>
+            </ul>
+          </nav>
         </div>
 
-        {/* Install PWA Button (Android, Windows, iOS) */}
-        {!isInstalled && (
-          <button
-            className="install-pwa-btn"
-            onClick={installApp}
-            title="Install JellyFlix App"
-            aria-label="Install JellyFlix App"
-          >
-            <Download size={15} color="#E50914" />
-            <span>Install App</span>
-          </button>
-        )}
+        <div className="navbar-right">
+          {/* Desktop Search Bar */}
+          <div className="search-container desktop-only-search">
+            <Search size={18} className="search-icon" onClick={handleSearchToggle} />
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="search-input"
+              placeholder="Titles, people, genres..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                if (activeTab !== 'search') onOpenSearch()
+              }}
+              onFocus={() => {
+                if (activeTab !== 'search') onOpenSearch()
+              }}
+            />
+          </div>
 
-        {/* Notifications Icon */}
-        <button className="player-btn" title="Notifications" aria-label="Notifications">
-          <Bell size={20} />
-        </button>
-
-        {/* User Profile Menu */}
-        <div className="user-menu" ref={menuRef}>
+          {/* Mobile Search Icon Button */}
           <button
-            className="user-avatar-btn"
-            onClick={() => setShowDropdown(!showDropdown)}
-            title={user?.Name || 'User'}
-            aria-label="User menu"
+            className="mobile-search-btn"
+            onClick={handleSearchToggle}
+            aria-label="Search"
+            title="Search"
           >
-            {userAvatarUrl ? (
-              <img
-                src={userAvatarUrl}
-                alt={user?.Name}
-                className="avatar-img"
-                onError={(e) => {
-                  ;(e.target as HTMLElement).style.display = 'none'
-                }}
-              />
-            ) : (
-              <div className="avatar-img">
-                {user?.Name ? user.Name.charAt(0).toUpperCase() : <User size={18} />}
-              </div>
-            )}
+            <Search size={20} />
           </button>
 
-          {showDropdown && (
-            <div className="dropdown-menu">
-              <div className="dropdown-item" style={{ color: '#fff', fontWeight: 600 }}>
-                <User size={16} color="#E50914" />
-                <span>{user?.Name || 'Jellyfin User'}</span>
-              </div>
-              <div className="dropdown-divider" />
-              <button
-                className="dropdown-item"
-                onClick={() => {
-                  setShowDropdown(false)
-                  onSwitchProfile()
-                }}
-              >
-                <Users size={16} />
-                <span>Switch Profile</span>
-              </button>
-              <button
-                className="dropdown-item"
-                onClick={() => {
-                  setShowDropdown(false)
-                  onOpenServerSettings()
-                }}
-              >
-                <Server size={16} />
-                <span>Server Settings</span>
-              </button>
-              {!isInstalled && (
+          {/* Install PWA Button (Prominent on both Mobile and Desktop) */}
+          {!isInstalled && (
+            <button
+              className="install-pwa-btn"
+              onClick={installApp}
+              title="Install JellyFlix App"
+              aria-label="Install JellyFlix App"
+            >
+              <Download size={15} color="#E50914" />
+              <span className="install-text">Install App</span>
+            </button>
+          )}
+
+          {/* Notifications Icon (Desktop) */}
+          <button className="player-btn desktop-only-notifications" title="Notifications" aria-label="Notifications">
+            <Bell size={20} />
+          </button>
+
+          {/* User Profile Menu */}
+          <div className="user-menu" ref={menuRef}>
+            <button
+              className="user-avatar-btn"
+              onClick={() => setShowDropdown(!showDropdown)}
+              title={user?.Name || 'User'}
+              aria-label="User menu"
+            >
+              {userAvatarUrl ? (
+                <img
+                  src={userAvatarUrl}
+                  alt={user?.Name}
+                  className="avatar-img"
+                  onError={(e) => {
+                    ;(e.target as HTMLElement).style.display = 'none'
+                  }}
+                />
+              ) : (
+                <div className="avatar-img">
+                  {user?.Name ? user.Name.charAt(0).toUpperCase() : <User size={18} />}
+                </div>
+              )}
+            </button>
+
+            {showDropdown && (
+              <div className="dropdown-menu">
+                <div className="dropdown-item" style={{ color: '#fff', fontWeight: 600 }}>
+                  <User size={16} color="#E50914" />
+                  <span>{user?.Name || 'Jellyfin User'}</span>
+                </div>
+                <div className="dropdown-divider" />
                 <button
                   className="dropdown-item"
                   onClick={() => {
                     setShowDropdown(false)
-                    installApp()
+                    onSwitchProfile()
                   }}
                 >
-                  <Download size={16} color="#E50914" />
-                  <span>Install JellyFlix App</span>
+                  <Users size={16} />
+                  <span>Switch Profile</span>
                 </button>
-              )}
-              <div className="dropdown-divider" />
-              <button
-                className="dropdown-item"
-                onClick={() => {
-                  setShowDropdown(false)
-                  logout()
-                }}
-              >
-                <LogOut size={16} />
-                <span>Sign Out of JellyFlix</span>
-              </button>
-            </div>
-          )}
+                <button
+                  className="dropdown-item"
+                  onClick={() => {
+                    setShowDropdown(false)
+                    onOpenServerSettings()
+                  }}
+                >
+                  <Server size={16} />
+                  <span>Server Settings</span>
+                </button>
+                {!isInstalled && (
+                  <button
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowDropdown(false)
+                      installApp()
+                    }}
+                  >
+                    <Download size={16} color="#E50914" />
+                    <span>Install JellyFlix App</span>
+                  </button>
+                )}
+                <div className="dropdown-divider" />
+                <button
+                  className="dropdown-item"
+                  onClick={() => {
+                    setShowDropdown(false)
+                    logout()
+                  }}
+                >
+                  <LogOut size={16} />
+                  <span>Sign Out of JellyFlix</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </header>
-    <InstallPwaModal isOpen={showIOSGuide} onClose={() => setShowIOSGuide(false)} />
+      </header>
+
+      {/* Mobile Expandable Search Bar Overlay */}
+      {mobileSearchOpen && (
+        <div className="mobile-search-bar-drawer">
+          <div className="mobile-search-input-wrap">
+            <Search size={18} color="#aaa" />
+            <input
+              ref={mobileInputRef}
+              type="text"
+              placeholder="Search movies, TV shows, actors..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                if (activeTab !== 'search') onOpenSearch()
+              }}
+              autoFocus
+            />
+            {searchQuery && (
+              <button className="clear-search-btn" onClick={() => setSearchQuery('')}>
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <button className="cancel-search-btn" onClick={() => setMobileSearchOpen(false)}>
+            Done
+          </button>
+        </div>
+      )}
+
+      {/* Cross-Platform PWA Installation Guidance Modal */}
+      <InstallPwaModal
+        isOpen={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+        onInstallDirect={installApp}
+        hasNativePrompt={hasNativePrompt}
+        isIOS={isIOS}
+        isAndroid={isAndroid}
+      />
     </>
   )
 }

@@ -85,6 +85,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const scrubTrackRef = useRef<HTMLDivElement>(null)
+  const mobileScrubTrackRef = useRef<HTMLDivElement>(null)
   const isScrubbingRef = useRef<boolean>(false)
   const scrubTimeRef = useRef<number>(0)
   const durationRef = useRef<number>(0)
@@ -92,6 +93,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   const hlsRef = useRef<Hls | null>(null)
   const progressIntervalRef = useRef<number | null>(null)
   const hideControlsTimerRef = useRef<number | null>(null)
+  const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 })
 
   const [item, setItem] = useState<JellyfinItem>(initialItem)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -105,6 +107,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   const [isHlsFallback, setIsHlsFallback] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [showSpeedMenu, setShowSpeedMenu] = useState(false)
+  const [showOverviewMore, setShowOverviewMore] = useState(false)
+
+  // Viewport tracking for YouTube mobile vs Desktop cinema
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768)
+  const [isPortrait, setIsPortrait] = useState(() => typeof window !== 'undefined' && window.innerHeight > window.innerWidth)
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768
+      const portrait = window.innerHeight > window.innerWidth
+      setIsMobile(mobile)
+      setIsPortrait(portrait)
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    window.addEventListener('resize', handleResize)
+    window.addEventListener('orientationchange', handleResize)
+    document.addEventListener('fullscreenchange', handleResize)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('orientationchange', handleResize)
+      document.removeEventListener('fullscreenchange', handleResize)
+    }
+  }, [])
+
+  const isMobilePortrait = isMobile && isPortrait && !isFullscreen
 
   // Netflix Interactive Scrub Bar States
   const [isScrubbing, setIsScrubbing] = useState(false)
@@ -113,14 +140,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   const [hoverPercent, setHoverPercent] = useState<number>(0)
   const [hoverChapter, setHoverChapter] = useState<string | null>(null)
 
-  // Netflix Seek Ripple feedback (+10 / -10)
+  // Seek Ripple feedback (+10 / -10)
   const [seekFeedback, setSeekFeedback] = useState<{ type: 'forward' | 'rewind'; amount: number } | null>(null)
 
   // Telemetry: Stats for Nerds
   const [showStatsForNerds, setShowStatsForNerds] = useState(false)
   const [droppedFrames, setDroppedFrames] = useState(0)
 
-  // Netflix 2-Column Audio & Subtitle menu
+  // Audio & Subtitle menu
   const [showAudioSubModal, setShowAudioSubModal] = useState(false)
   const [audioStreams, setAudioStreams] = useState<JellyfinMediaStream[]>([])
   const [subtitleStreams, setSubtitleStreams] = useState<JellyfinMediaStream[]>([])
@@ -131,7 +158,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   const [isSubtitleLoading, setIsSubtitleLoading] = useState<boolean>(false)
   const [isAudioRemux, setIsAudioRemux] = useState<boolean>(false)
 
-  // In-player Episodes drawer
+  // In-player Episodes
   const [showEpisodesDrawer, setShowEpisodesDrawer] = useState(false)
   const [seasons, setSeasons] = useState<JellyfinItem[]>([])
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('')
@@ -167,7 +194,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     const video = videoRef.current
     if (!video) return
 
-    // Clean up any existing native tracks
     while (video.getElementsByTagName('track').length > 0) {
       video.removeChild(video.getElementsByTagName('track')[0])
     }
@@ -188,7 +214,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
         setSubtitleCues(cues)
         setIsSubtitleLoading(false)
 
-        // Dynamically attach native WebVTT track for native PiP & Fullscreen compatibility
         try {
           const blob = new Blob([vttText], { type: 'text/vtt' })
           const blobUrl = URL.createObjectURL(blob)
@@ -200,7 +225,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           track.default = true
           video.appendChild(track)
         } catch {
-          // Fallback to React overlay only
+          // Fallback to overlay
         }
       })
       .catch((err) => {
@@ -235,7 +260,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       .then((next) => setNextEpisode(next))
   }, [item, user])
 
-  // Format seconds to mm:ss or hh:mm:ss
   const formatTime = (secs: number) => {
     if (isNaN(secs)) return '0:00'
     const h = Math.floor(secs / 3600)
@@ -247,7 +271,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     return `${m}:${s < 10 ? '0' : ''}${s}`
   }
 
-  // Report progress to Jellyfin
   const reportProgress = useCallback(
     (paused: boolean, eventName = 'TimeUpdate') => {
       if (!videoRef.current) return
@@ -266,13 +289,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     [item.Id, selectedAudioIndex, selectedSubtitleIndex]
   )
 
-  // Start stream (Direct play for native mp4/webm, HLS stream copy remux for mkv/transcoded audio)
   const startStream = useCallback(
     (useHls: boolean, audioIdx?: number, seekSeconds?: number) => {
       const video = videoRef.current
       if (!video) return
 
-      // TV Series / Seasons are containers, not playable streams
       if (item.Type === 'Series' || item.Type === 'Season') {
         console.warn('Cannot stream Series entity directly, waiting for episode resolution')
         return
@@ -293,10 +314,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           : video.currentTime > 0
           ? video.currentTime
           : (item.UserData?.PlaybackPositionTicks || 0) / (1000 * 10000)
-      const targetTicks = Math.floor(targetSeconds * 1000 * 10000)
 
       const container = (item.Container || item.MediaSources?.[0]?.Container || '').toLowerCase()
-      // Web browsers cannot perform instant random seeking in raw MKV files over HTTP byte ranges
       const isDirectCompatible = (container === 'mp4' || container === 'm4v' || container === 'webm') && !isAlternateAudio && !useHls
 
       if (isDirectCompatible) {
@@ -321,14 +340,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
         setIsAudioRemux(true)
         const hlsUrl = jellyfinApi.getHlsStreamUrl(item.Id, {
           audioStreamIndex: currentAudio,
-          videoCodec: 'copy', // Stream copy video (ZERO CPU/GPU transcoding!)
+          videoCodec: 'copy',
           audioCodec: 'aac,mp3',
         })
 
         if (Hls.isSupported()) {
           const hls = new Hls({
             enableWorker: true,
-            backBufferLength: 30, // Retain 30s buffer for instant 0ms 10s rewinds!
+            backBufferLength: 30,
             maxBufferLength: 30,
             maxMaxBufferLength: 60,
             maxBufferSize: 60 * 1000 * 1000,
@@ -351,102 +370,51 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
             }
             video.play().catch(() => {})
           })
-          hls.on(Hls.Events.ERROR, (_event, data) => {
-            if (data.fatal) {
-              switch (data.type) {
-                case Hls.ErrorTypes.NETWORK_ERROR:
-                  hls.startLoad()
-                  break
-                case Hls.ErrorTypes.MEDIA_ERROR:
-                  hls.recoverMediaError()
-                  break
-                default:
-                  hls.destroy()
-                  break
-              }
-            }
-          })
           hlsRef.current = hls
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = hlsUrl
           video.onloadedmetadata = () => {
-            if (targetSeconds > 0) {
-              video.currentTime = targetSeconds
-            }
+            if (targetSeconds > 0) video.currentTime = targetSeconds
             video.play().catch(() => {})
           }
         }
       }
-
-      jellyfinApi.reportPlaybackStart({
-        ItemId: item.Id,
-        PositionTicks: targetTicks,
-        IsPaused: false,
-        PlayMethod: isDirectCompatible ? 'DirectPlay' : 'DirectStream',
-      })
     },
-    [item, selectedAudioIndex, audioStreams, token]
+    [item, token, selectedAudioIndex, audioStreams]
   )
 
   useEffect(() => {
-    // If passed a Series or Season, resolve the playable episode first!
-    if (item.Type === 'Series' || item.Type === 'Season') {
-      if (!user) return
-      const seriesId = item.Type === 'Series' ? item.Id : (item.SeriesId || item.Id)
-      jellyfinApi
-        .getNextUp(user.Id, seriesId)
-        .then((nextUp) => {
-          if (nextUp?.Items && nextUp.Items.length > 0) {
-            setItem(nextUp.Items[0])
-            return
-          }
-          jellyfinApi.getEpisodes(seriesId, undefined, user.Id).then((eps) => {
-            if (eps?.Items && eps.Items.length > 0) {
-              setItem(eps.Items[0])
-            }
-          })
-        })
-        .catch((err) => {
-          console.error('Failed to resolve episode for series playback:', err)
-        })
-      return
-    }
-
     startStream(isHlsFallback)
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy()
+        hlsRef.current = null
+      }
+    }
+  }, [item.Id, isHlsFallback, startStream])
 
+  useEffect(() => {
     progressIntervalRef.current = window.setInterval(() => {
       if (videoRef.current && !videoRef.current.paused) {
         reportProgress(false)
-        // Telemetry update
-        const video = videoRef.current as any
-        if (video.getVideoPlaybackQuality) {
-          const q = video.getVideoPlaybackQuality()
-          setDroppedFrames(q.droppedVideoFrames || 0)
+        const v = videoRef.current as any
+        if (v.getVideoPlaybackQuality) {
+          setDroppedFrames(v.getVideoPlaybackQuality().droppedVideoFrames || 0)
         }
       }
-    }, 7000)
+    }, 10000)
 
     return () => {
       if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
-      if (videoRef.current) {
-        const positionTicks = Math.floor(videoRef.current.currentTime * 1000 * 10000)
-        jellyfinApi.reportPlaybackStopped({
-          ItemId: item.Id,
-          PositionTicks: positionTicks,
-        })
-      }
-      if (hlsRef.current) {
-        hlsRef.current.destroy()
-      }
+      reportProgress(true, 'Stop')
     }
-  }, [startStream, isHlsFallback, item.Id, item.Type, reportProgress, user])
+  }, [reportProgress])
 
-  // Mouse activity
   const handleMouseMove = () => {
     setShowControls(true)
     if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current)
     hideControlsTimerRef.current = window.setTimeout(() => {
-      if (isPlaying && !showAudioSubModal && !showEpisodesDrawer && !showStatsForNerds) {
+      if (videoRef.current && !videoRef.current.paused && !isScrubbingRef.current) {
         setShowControls(false)
         setShowSpeedMenu(false)
       }
@@ -473,7 +441,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + seconds))
     reportProgress(video.paused, 'Seek')
 
-    // Animated ripple badge
     setSeekFeedback({
       type: seconds > 0 ? 'forward' : 'rewind',
       amount: Math.abs(seconds),
@@ -481,9 +448,33 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     setTimeout(() => setSeekFeedback(null), 800)
   }
 
-  // Calculate percentage and target seconds from clientX on scrubber
-  const calculateScrubTimeFromEvent = useCallback((clientX: number) => {
-    const track = scrubTrackRef.current
+  // Double tap handler for mobile video
+  const handleMobileVideoTouch = (e: React.TouchEvent<HTMLDivElement>) => {
+    const now = Date.now()
+    const touch = e.changedTouches[0]
+    if (!touch) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = touch.clientX - rect.left
+    const width = rect.width
+
+    if (now - lastTapRef.current.time < 320) {
+      // Double tap!
+      if (x < width * 0.35) {
+        skipSeconds(-10)
+      } else if (x > width * 0.65) {
+        skipSeconds(10)
+      } else {
+        togglePlay()
+      }
+      lastTapRef.current = { time: 0, x: 0 }
+    } else {
+      lastTapRef.current = { time: now, x }
+      setShowControls((prev) => !prev)
+    }
+  }
+
+  const calculateScrubTimeFromEvent = useCallback((clientX: number, targetRef?: React.RefObject<HTMLDivElement | null>) => {
+    const track = targetRef?.current || scrubTrackRef.current || mobileScrubTrackRef.current
     if (!track) return { percent: 0, time: 0 }
     const rect = track.getBoundingClientRect()
     const x = Math.max(0, Math.min(clientX - rect.left, rect.width))
@@ -493,7 +484,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     return { percent: percent * 100, time }
   }, [])
 
-  // Find chapter for a given time
   const getChapterForTime = useCallback(
     (time: number) => {
       if (!item.Chapters || item.Chapters.length === 0) return null
@@ -503,11 +493,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     [item.Chapters]
   )
 
-  // Start scrubbing on mouse/touch down
-  const handleScrubStart = (clientX: number) => {
+  const handleScrubStart = (clientX: number, targetRef?: React.RefObject<HTMLDivElement | null>) => {
     const video = videoRef.current
     if (!video) return
-    const { percent, time } = calculateScrubTimeFromEvent(clientX)
+    const { percent, time } = calculateScrubTimeFromEvent(clientX, targetRef)
 
     isScrubbingRef.current = true
     scrubTimeRef.current = time
@@ -520,7 +509,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     setHoverChapter(getChapterForTime(time))
   }
 
-  // Scrub move (hover or active drag)
   const handleScrubMove = useCallback(
     (clientX: number, isDragging: boolean) => {
       const { percent, time } = calculateScrubTimeFromEvent(clientX)
@@ -536,7 +524,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     [calculateScrubTimeFromEvent, getChapterForTime]
   )
 
-  // Commit seek on mouse/touch release
   const handleScrubEnd = useCallback(() => {
     if (!isScrubbingRef.current) return
     isScrubbingRef.current = false
@@ -555,17 +542,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     }
   }, [reportProgress])
 
-  // Global window listeners for drag scrubbing outside track bounds
   useEffect(() => {
     const onWindowMouseMove = (e: MouseEvent) => {
-      if (isScrubbingRef.current) {
-        handleScrubMove(e.clientX, true)
-      }
+      if (isScrubbingRef.current) handleScrubMove(e.clientX, true)
     }
     const onWindowMouseUp = () => {
-      if (isScrubbingRef.current) {
-        handleScrubEnd()
-      }
+      if (isScrubbingRef.current) handleScrubEnd()
     }
     const onWindowTouchMove = (e: TouchEvent) => {
       if (isScrubbingRef.current && e.touches.length > 0) {
@@ -573,9 +555,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       }
     }
     const onWindowTouchEnd = () => {
-      if (isScrubbingRef.current) {
-        handleScrubEnd()
-      }
+      if (isScrubbingRef.current) handleScrubEnd()
     }
 
     window.addEventListener('mousemove', onWindowMouseMove)
@@ -593,10 +573,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen().catch(() => {})
+      if (containerRef.current?.requestFullscreen) {
+        containerRef.current.requestFullscreen().catch(() => {})
+      }
       setIsFullscreen(true)
     } else {
-      document.exitFullscreen().catch(() => {})
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {})
+      }
       setIsFullscreen(false)
     }
   }
@@ -614,7 +598,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     }
   }
 
-  // Play next episode
   const handlePlayNextEpisode = () => {
     if (nextEpisode) {
       setShowBingeCountdown(false)
@@ -623,7 +606,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     }
   }
 
-  // Chapter intro skip check, subtitle cue update & end-of-episode countdown check
   const handleTimeUpdate = () => {
     const video = videoRef.current
     if (!video) return
@@ -638,7 +620,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       setBuffered(video.buffered.end(video.buffered.length - 1))
     }
 
-    // Subtitle cue matching (0% CPU, instant text sync)
     if (subtitleCues.length > 0) {
       const active = subtitleCues.find((c) => cTime >= c.start && cTime <= c.end)
       setActiveSubtitleText(active ? active.text : '')
@@ -646,20 +627,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       setActiveSubtitleText('')
     }
 
-    // Check chapters for "Intro"
     if (item.Chapters && item.Chapters.length > 0) {
       const introChapter = item.Chapters.find((ch) =>
         ch.Name?.toLowerCase().includes('intro')
       )
       if (introChapter) {
         const startSec = introChapter.StartPositionTicks / (1000 * 10000)
-        // Assume intro is 90s if next chapter not specified
         const endSec = startSec + 90
         setShowSkipIntro(cTime >= startSec && cTime <= endSec)
       }
     }
 
-    // Check end-of-episode binge countdown (within 35 seconds of end)
     if (nextEpisode && dur > 60 && dur - cTime <= 35 && !showBingeCountdown) {
       setShowBingeCountdown(true)
       setCountdownSeconds(Math.max(1, Math.floor(dur - cTime)))
@@ -699,7 +677,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           })
           break
         case 'f':
-          case 'F':
+        case 'F':
           e.preventDefault()
           toggleFullscreen()
           break
@@ -729,95 +707,569 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [togglePlay, onClose, showAudioSubModal, showEpisodesDrawer, showStatsForNerds])
 
-  const mediaSource = item.MediaSources?.[0]
   const videoStream = audioStreams.length > 0 ? item.MediaStreams?.find((s) => s.Type === 'Video') : null
 
   return (
     <div
-      className="video-player-container"
+      className={`video-player-container ${isMobilePortrait ? 'mobile-youtube-layout' : ''}`}
       ref={containerRef}
       onMouseMove={handleMouseMove}
       onClick={handleMouseMove}
     >
       {/* Loading state if resolving episode */}
       {(item.Type === 'Series' || item.Type === 'Season') && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#141414', zIndex: 10, gap: 16 }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#141414', zIndex: 60, gap: 16 }}>
           <div className="spinner" style={{ width: 44, height: 44, border: '4px solid rgba(255,255,255,0.2)', borderTopColor: '#E50914', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
           <span style={{ color: '#aaa', fontSize: '0.95rem', letterSpacing: 0.5 }}>Loading Episode...</span>
         </div>
       )}
-      <video
-        ref={videoRef}
-        className="video-element"
-        playsInline
-        onTimeUpdate={handleTimeUpdate}
-        onDurationChange={() => {
-          if (videoRef.current) {
-            setDuration(videoRef.current.duration)
-            durationRef.current = videoRef.current.duration
-          }
-        }}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onClick={togglePlay}
-      />
 
-      {/* Netflix-Style Subtitle Overlay (0% CPU, Native WebVTT render) */}
-      {activeSubtitleText && (
-        <div className="netflix-subtitle-overlay">
-          <div className="netflix-subtitle-text">{activeSubtitleText}</div>
-        </div>
-      )}
-
-      {/* Animated Center Seek Ripple (+10 / -10) */}
-      {seekFeedback && (
-        <div className="seek-ripple-overlay">
-          <div className="seek-ripple-circle">
-            {seekFeedback.type === 'forward' ? <RotateCw size={42} /> : <RotateCcw size={42} />}
-            <span className="seek-ripple-text">
-              {seekFeedback.type === 'forward' ? '+10' : '-10'}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Skip Intro Button */}
-      {showSkipIntro && (
-        <button
-          className="skip-intro-btn"
-          onClick={() => {
+      {/* Main Video Viewport (Continuously mounted so streaming never restarts!) */}
+      <div className="video-viewport-wrapper" onTouchEnd={isMobilePortrait ? handleMobileVideoTouch : undefined}>
+        <video
+          ref={videoRef}
+          className="video-element"
+          playsInline
+          onTimeUpdate={handleTimeUpdate}
+          onDurationChange={() => {
             if (videoRef.current) {
-              videoRef.current.currentTime += 85
-              setShowSkipIntro(false)
+              setDuration(videoRef.current.duration)
+              durationRef.current = videoRef.current.duration
             }
           }}
-        >
-          Skip Intro
-        </button>
-      )}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onClick={!isMobilePortrait ? togglePlay : undefined}
+        />
 
-      {/* Next Episode Binge Countdown Card */}
-      {showBingeCountdown && nextEpisode && (
-        <div className="binge-countdown-card">
-          <div style={{ fontSize: '0.85rem', color: '#aaa', textTransform: 'uppercase', letterSpacing: 1 }}>
-            Next Episode in {countdownSeconds}s
+        {/* Subtitle Overlay */}
+        {activeSubtitleText && (
+          <div className={`netflix-subtitle-overlay ${isMobilePortrait ? 'mobile-yt-sub-pos' : ''}`}>
+            <div className="netflix-subtitle-text">{activeSubtitleText}</div>
           </div>
-          <div style={{ fontWeight: 700, fontSize: '1.05rem', margin: '4px 0' }}>
-            {nextEpisode.Name}
+        )}
+
+        {/* Animated Center Seek Ripple (+10 / -10) */}
+        {seekFeedback && (
+          <div className="seek-ripple-overlay">
+            <div className="seek-ripple-circle">
+              {seekFeedback.type === 'forward' ? <RotateCw size={isMobilePortrait ? 32 : 42} /> : <RotateCcw size={isMobilePortrait ? 32 : 42} />}
+              <span className="seek-ripple-text">
+                {seekFeedback.type === 'forward' ? '+10' : '-10'}
+              </span>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-            <button className="btn-play" style={{ padding: '6px 14px', fontSize: '0.9rem' }} onClick={handlePlayNextEpisode}>
-              <Play size={16} fill="#000" />
-              <span>Play Now</span>
-            </button>
+        )}
+
+        {/* Skip Intro Button */}
+        {showSkipIntro && (
+          <button
+            className="skip-intro-btn"
+            onClick={() => {
+              if (videoRef.current) {
+                videoRef.current.currentTime += 85
+                setShowSkipIntro(false)
+              }
+            }}
+          >
+            Skip Intro
+          </button>
+        )}
+
+        {/* Next Episode Binge Countdown Card */}
+        {showBingeCountdown && nextEpisode && (
+          <div className="binge-countdown-card">
+            <div style={{ fontSize: '0.85rem', color: '#aaa', textTransform: 'uppercase', letterSpacing: 1 }}>
+              Next Episode in {countdownSeconds}s
+            </div>
+            <div style={{ fontWeight: 700, fontSize: '1.05rem', margin: '4px 0' }}>
+              {nextEpisode.Name}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <button className="btn-play" style={{ padding: '6px 14px', fontSize: '0.9rem' }} onClick={handlePlayNextEpisode}>
+                <Play size={16} fill="#000" />
+                <span>Play Now</span>
+              </button>
+              <button
+                className="btn-info"
+                style={{ padding: '6px 12px', fontSize: '0.9rem' }}
+                onClick={() => setShowBingeCountdown(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* --- MOBILE YOUTUBE OVERLAY (Shown on 16:9 docked video in portrait mode) --- */}
+        {isMobilePortrait && (
+          <div className={`mobile-yt-overlay ${showControls ? 'visible' : 'hidden'}`}>
+            <div className="mobile-yt-top-row">
+              <button className="mobile-yt-btn" onClick={onClose} aria-label="Close">
+                <ArrowLeft size={22} />
+              </button>
+              <span className="mobile-yt-header-title">{item.SeriesName || item.Name}</span>
+              <div className="mobile-yt-top-actions">
+                <button
+                  className="mobile-yt-btn"
+                  onClick={() => setShowAudioSubModal(true)}
+                  aria-label="Subtitles & Audio"
+                >
+                  <Subtitles size={20} />
+                </button>
+                <button
+                  className="mobile-yt-btn"
+                  onClick={toggleFullscreen}
+                  aria-label="Fullscreen"
+                >
+                  <Maximize size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Center Play/Rewind/Forward Controls */}
+            <div className="mobile-yt-center-row">
+              <button className="mobile-yt-center-btn" onClick={() => skipSeconds(-10)}>
+                <RotateCcw size={28} />
+                <span className="mobile-yt-seek-num">10</span>
+              </button>
+
+              <button className="mobile-yt-center-play-btn" onClick={togglePlay}>
+                {isPlaying ? <Pause size={34} fill="#fff" /> : <Play size={34} fill="#fff" />}
+              </button>
+
+              <button className="mobile-yt-center-btn" onClick={() => skipSeconds(10)}>
+                <RotateCw size={28} />
+                <span className="mobile-yt-seek-num">10</span>
+              </button>
+            </div>
+
+            {/* Bottom mini scrub bar on mobile video */}
+            <div className="mobile-yt-bottom-row">
+              <span className="mobile-yt-time">{formatTime(isScrubbing ? scrubPosition : currentTime)}</span>
+              <div
+                className="mobile-yt-scrub-bar"
+                ref={mobileScrubTrackRef}
+                onTouchStart={(e) => {
+                  if (e.touches.length > 0) handleScrubStart(e.touches[0].clientX, mobileScrubTrackRef)
+                }}
+              >
+                <div
+                  className="mobile-yt-scrub-buf"
+                  style={{ width: `${Math.min(100, (buffered / duration) * 100)}%` }}
+                />
+                <div
+                  className="mobile-yt-scrub-prog"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      ((isScrubbing ? scrubPosition : currentTime) / duration) * 100
+                    )}%`,
+                  }}
+                />
+              </div>
+              <span className="mobile-yt-time">{formatTime(duration)}</span>
+              <button className="mobile-yt-btn" onClick={toggleFullscreen}>
+                <Maximize size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* --- DESKTOP & LANDSCAPE CINEMA CONTROLS OVERLAY --- */}
+        {!isMobilePortrait && (
+          <div className={`player-controls-overlay ${showControls ? '' : 'hidden'}`}>
+            {/* Top bar */}
+            <div className="player-top-bar">
+              <button className="player-back-btn" onClick={onClose}>
+                <ArrowLeft size={28} />
+              </button>
+              <div className="player-title-info">
+                <span className="player-main-title">{item.SeriesName || item.Name}</span>
+                {item.SeriesName && (
+                  <span className="player-sub-title">
+                    {item.SeasonName ? `${item.SeasonName} • ` : ''}
+                    {item.IndexNumber ? `Ep ${item.IndexNumber}: ` : ''}
+                    {item.Name}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom bar */}
+            <div className="player-bottom-bar">
+              <div
+                className={`scrub-container ${isScrubbing ? 'is-scrubbing' : ''}`}
+                ref={scrubTrackRef}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  handleScrubStart(e.clientX, scrubTrackRef)
+                }}
+                onTouchStart={(e) => {
+                  if (e.touches.length > 0) handleScrubStart(e.touches[0].clientX, scrubTrackRef)
+                }}
+                onMouseMove={(e) => {
+                  if (!isScrubbing) handleScrubMove(e.clientX, false)
+                }}
+                onMouseLeave={() => {
+                  if (!isScrubbing) {
+                    setHoverTime(null)
+                    setHoverChapter(null)
+                  }
+                }}
+              >
+                {hoverTime !== null && duration > 0 && (
+                  <div
+                    className="scrub-tooltip"
+                    style={{
+                      left: `${Math.max(2, Math.min(98, hoverPercent))}%`,
+                    }}
+                  >
+                    <div className="scrub-tooltip-time">{formatTime(hoverTime)}</div>
+                    {hoverChapter && <div className="scrub-tooltip-chapter">{hoverChapter}</div>}
+                  </div>
+                )}
+
+                <div className="scrub-track">
+                  {duration > 0 && (
+                    <div
+                      className="scrub-buffered"
+                      style={{ width: `${Math.min(100, (buffered / duration) * 100)}%` }}
+                    />
+                  )}
+                  {duration > 0 && (
+                    <div
+                      className="scrub-progress"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          ((isScrubbing ? scrubPosition : currentTime) / duration) * 100
+                        )}%`,
+                      }}
+                    />
+                  )}
+                  {duration > 0 && (
+                    <div
+                      className={`scrub-thumb ${isScrubbing ? 'active' : ''}`}
+                      style={{
+                        left: `${Math.min(
+                          100,
+                          ((isScrubbing ? scrubPosition : currentTime) / duration) * 100
+                        )}%`,
+                      }}
+                    />
+                  )}
+
+                  {duration > 0 &&
+                    item.Chapters &&
+                    item.Chapters.map((chap, idx) => {
+                      const sec = chap.StartPositionTicks / 1e7
+                      if (sec <= 0 || sec >= duration) return null
+                      const pct = (sec / duration) * 100
+                      return (
+                        <div
+                          key={idx}
+                          className="scrub-chapter-marker"
+                          style={{ left: `${pct}%` }}
+                          title={chap.Name}
+                        />
+                      )
+                    })}
+                </div>
+              </div>
+
+              {/* Action buttons row */}
+              <div className="player-actions-row">
+                <div className="player-actions-left">
+                  <button className="player-btn" onClick={togglePlay} title={isPlaying ? 'Pause' : 'Play'}>
+                    {isPlaying ? <Pause size={28} fill="white" /> : <Play size={28} fill="white" />}
+                  </button>
+
+                  <button className="player-btn circular-seek-btn" onClick={() => skipSeconds(-10)} title="Rewind 10s">
+                    <RotateCcw size={24} />
+                    <span className="seek-number">10</span>
+                  </button>
+
+                  <button className="player-btn circular-seek-btn" onClick={() => skipSeconds(10)} title="Forward 10s">
+                    <RotateCw size={24} />
+                    <span className="seek-number">10</span>
+                  </button>
+
+                  <div className="volume-container desktop-volume-control">
+                    <button
+                      className="player-btn"
+                      onClick={() => {
+                        const next = !isMuted
+                        setIsMuted(next)
+                        if (videoRef.current) videoRef.current.muted = next
+                      }}
+                    >
+                      {isMuted || volume === 0 ? <VolumeX size={24} /> : <Volume2 size={24} />}
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      className="volume-slider"
+                      value={isMuted ? 0 : volume}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value)
+                        setVolume(val)
+                        setIsMuted(val === 0)
+                        if (videoRef.current) {
+                          videoRef.current.volume = val
+                          videoRef.current.muted = val === 0
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <span className="time-display">
+                    {formatTime(isScrubbing ? scrubPosition : currentTime)} / {formatTime(duration)}
+                  </span>
+                </div>
+
+                <div className="player-actions-right">
+                  {nextEpisode && (
+                    <button
+                      className="player-btn"
+                      onClick={handlePlayNextEpisode}
+                      title={`Next: ${nextEpisode.Name}`}
+                    >
+                      <SkipForward size={22} />
+                    </button>
+                  )}
+
+                  {item.SeriesId && (
+                    <button
+                      className="player-btn"
+                      title="Episodes"
+                      onClick={() => {
+                        setShowEpisodesDrawer(!showEpisodesDrawer)
+                        setShowAudioSubModal(false)
+                      }}
+                    >
+                      <Layers size={22} />
+                    </button>
+                  )}
+
+                  <button
+                    className="player-btn"
+                    title="Audio & Subtitles"
+                    onClick={() => {
+                      setShowAudioSubModal(!showAudioSubModal)
+                      setShowEpisodesDrawer(false)
+                    }}
+                  >
+                    <Subtitles size={22} />
+                  </button>
+
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      className="player-btn"
+                      title="Playback Speed"
+                      onClick={() => setShowSpeedMenu(!showSpeedMenu)}
+                    >
+                      <Gauge size={22} />
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, marginLeft: 2 }}>{playbackSpeed}x</span>
+                    </button>
+                    {showSpeedMenu && (
+                      <div className="dropdown-menu" style={{ bottom: '45px', top: 'auto', right: 0, minWidth: 120 }}>
+                        {[0.5, 0.75, 1, 1.25, 1.5, 2].map((spd) => (
+                          <button
+                            key={spd}
+                            className="dropdown-item"
+                            style={{ color: playbackSpeed === spd ? '#E50914' : 'inherit' }}
+                            onClick={() => {
+                              setPlaybackSpeed(spd)
+                              if (videoRef.current) videoRef.current.playbackRate = spd
+                              setShowSpeedMenu(false)
+                            }}
+                          >
+                            {spd}x {spd === 1 ? '(Normal)' : ''}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <button className="player-btn" title="Picture in Picture" onClick={togglePiP}>
+                    <PictureInPicture size={22} />
+                  </button>
+
+                  <button
+                    className="player-btn"
+                    title="Stats for Nerds (S)"
+                    style={{ color: showStatsForNerds ? '#E50914' : 'inherit' }}
+                    onClick={() => setShowStatsForNerds(!showStatsForNerds)}
+                  >
+                    <Activity size={22} />
+                  </button>
+
+                  <button className="player-btn" onClick={toggleFullscreen} title="Fullscreen (F)">
+                    {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* --- YOUTUBE MOBILE SCROLLABLE CONTENT (Rendered below video in portrait mode) --- */}
+      {isMobilePortrait && (
+        <div className="mobile-yt-scroll-area">
+          {/* Title & Metadata */}
+          <div className="mobile-yt-meta-card">
+            <h1 className="mobile-yt-show-name">{item.SeriesName || item.Name}</h1>
+            {item.SeriesName && (
+              <div className="mobile-yt-ep-name">
+                {item.SeasonName ? `${item.SeasonName} • ` : ''}
+                {item.IndexNumber ? `Episode ${item.IndexNumber}: ` : ''}
+                {item.Name}
+              </div>
+            )}
+            <div className="mobile-yt-tags-row">
+              {item.ProductionYear && <span className="yt-tag">{item.ProductionYear}</span>}
+              {item.OfficialRating && <span className="yt-tag rating">{item.OfficialRating}</span>}
+              <span className="yt-tag hd">1080p</span>
+              <span className="yt-tag match">83% Match</span>
+            </div>
+            {item.Overview && (
+              <div className="mobile-yt-overview-box">
+                <p className="mobile-yt-overview-text">
+                  {showOverviewMore ? item.Overview : `${item.Overview.slice(0, 110)}`}
+                  {item.Overview.length > 110 && (
+                    <button
+                      className="mobile-yt-more-link"
+                      onClick={() => setShowOverviewMore(!showOverviewMore)}
+                    >
+                      {showOverviewMore ? ' Show less' : ' ...more'}
+                    </button>
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Action Pills Row (YouTube style) */}
+          <div className="mobile-yt-action-pills">
             <button
-              className="btn-info"
-              style={{ padding: '6px 12px', fontSize: '0.9rem' }}
-              onClick={() => setShowBingeCountdown(false)}
+              className="yt-pill-btn"
+              onClick={() => setShowAudioSubModal(true)}
             >
-              Cancel
+              <Subtitles size={16} color="#E50914" />
+              <span>Audio / Subs</span>
+            </button>
+
+            <button
+              className="yt-pill-btn"
+              onClick={() => {
+                const speeds = [1, 1.25, 1.5, 2, 0.75]
+                const nextIdx = (speeds.indexOf(playbackSpeed) + 1) % speeds.length
+                const newSpeed = speeds[nextIdx]
+                setPlaybackSpeed(newSpeed)
+                if (videoRef.current) videoRef.current.playbackRate = newSpeed
+              }}
+            >
+              <Gauge size={16} />
+              <span>{playbackSpeed}x</span>
+            </button>
+
+            {nextEpisode && (
+              <button className="yt-pill-btn" onClick={handlePlayNextEpisode}>
+                <SkipForward size={16} color="#E50914" />
+                <span>Next Ep</span>
+              </button>
+            )}
+
+            <button
+              className="yt-pill-btn"
+              onClick={() => setShowStatsForNerds(!showStatsForNerds)}
+            >
+              <Activity size={16} />
+              <span>Stats</span>
             </button>
           </div>
+
+          {/* Next Episode Up Next Banner */}
+          {nextEpisode && (
+            <div className="mobile-yt-next-card" onClick={handlePlayNextEpisode}>
+              <div className="mobile-yt-next-info">
+                <span className="mobile-yt-next-label">UP NEXT</span>
+                <span className="mobile-yt-next-title">
+                  {nextEpisode.IndexNumber ? `Ep ${nextEpisode.IndexNumber}: ` : ''}
+                  {nextEpisode.Name}
+                </span>
+              </div>
+              <button className="mobile-yt-next-play-icon" aria-label="Play Next">
+                <Play size={18} fill="#fff" />
+              </button>
+            </div>
+          )}
+
+          {/* Inline Season Episodes List (YouTube Playlist style) */}
+          {item.SeriesId && seasonEpisodes.length > 0 && (
+            <div className="mobile-yt-episodes-block">
+              <div className="mobile-yt-episodes-bar">
+                <span className="mobile-yt-episodes-heading">Episodes</span>
+                {seasons.length > 1 && (
+                  <select
+                    className="mobile-yt-season-dropdown"
+                    value={selectedSeasonId}
+                    onChange={(e) => setSelectedSeasonId(e.target.value)}
+                  >
+                    {seasons.map((s) => (
+                      <option key={s.Id} value={s.Id}>
+                        {s.Name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="mobile-yt-episodes-list">
+                {seasonEpisodes.map((ep, idx) => {
+                  const isCurrent = ep.Id === item.Id
+                  const epThumb = jellyfinApi.getImageUrl(ep.Id, 'Primary', { maxWidth: 220, quality: 75 })
+                  return (
+                    <div
+                      key={ep.Id}
+                      className={`mobile-yt-episode-row ${isCurrent ? 'active-playing' : ''}`}
+                      onClick={() => {
+                        if (!isCurrent) {
+                          setItem(ep)
+                          setIsHlsFallback(false)
+                        }
+                      }}
+                    >
+                      <div className="mobile-yt-thumb-box">
+                        <img src={epThumb} alt={ep.Name} className="mobile-yt-thumb-img" />
+                        <span className="mobile-yt-thumb-num">{ep.IndexNumber ?? idx + 1}</span>
+                        {isCurrent && (
+                          <div className="mobile-yt-playing-pill">
+                            <span>PLAYING</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mobile-yt-ep-meta">
+                        <div className="mobile-yt-ep-title-text" style={{ color: isCurrent ? '#E50914' : '#fff' }}>
+                          {ep.Name}
+                        </div>
+                        <div className="mobile-yt-ep-runtime">
+                          {ep.RunTimeTicks ? formatTime(ep.RunTimeTicks / 1e7) : ''}
+                        </div>
+                        {ep.Overview && (
+                          <div className="mobile-yt-ep-synopsis">{ep.Overview}</div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -857,32 +1309,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
             <span>{videoStream?.Width ? `${videoStream.Width}x${videoStream.Height}` : `${videoRef.current?.videoWidth || 1920}x${videoRef.current?.videoHeight || 1080}`}</span>
           </div>
           <div className="nerd-stat">
-            <span>Video Codec:</span>
-            <span>{videoStream?.Codec?.toUpperCase() || 'H.264'}</span>
-          </div>
-          <div className="nerd-stat">
-            <span>Audio Codec:</span>
-            <span>{audioStreams.find((a) => a.Index === selectedAudioIndex)?.Codec?.toUpperCase() || 'AAC'} ({audioStreams.find((a) => a.Index === selectedAudioIndex)?.Channels ? `${audioStreams.find((a) => a.Index === selectedAudioIndex)?.Channels}ch` : '2ch Stereo'})</span>
-          </div>
-          <div className="nerd-stat">
-            <span>Buffer Health:</span>
-            <span>{(buffered - currentTime).toFixed(1)}s ahead</span>
-          </div>
-          <div className="nerd-stat">
             <span>Dropped Frames:</span>
             <span>{droppedFrames}</span>
           </div>
           <div className="nerd-stat">
-            <span>Disk Path:</span>
-            <span style={{ fontSize: '0.75rem', fontFamily: 'monospace', color: '#888', wordBreak: 'break-all' }}>
-              {mediaSource?.Path || item.Path || 'OMV Docker Mounted'}
-            </span>
+            <span>Buffer:</span>
+            <span>{(buffered - currentTime).toFixed(1)}s ahead</span>
           </div>
         </div>
       )}
 
-      {/* In-Player Series Episodes Drawer */}
-      {showEpisodesDrawer && (
+      {/* Episodes Drawer (Desktop & Landscape) */}
+      {showEpisodesDrawer && !isMobilePortrait && (
         <div className="episodes-drawer-overlay" onClick={() => setShowEpisodesDrawer(false)}>
           <div className="episodes-drawer" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -943,7 +1381,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
         </div>
       )}
 
-      {/* Netflix Exact 2-Column Audio & Subtitles Panel */}
+      {/* Audio & Subtitles Modal (Responsive for Mobile & Desktop) */}
       {showAudioSubModal && (
         <div className="audio-sub-modal-overlay" onClick={() => setShowAudioSubModal(false)}>
           <div className="audio-sub-modal" onClick={(e) => e.stopPropagation()}>
@@ -1003,9 +1441,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
                 <div className="audio-sub-list">
                   <button
                     className={`audio-sub-item ${selectedSubtitleIndex === undefined ? 'selected' : ''}`}
-                    onClick={() => {
-                      setSelectedSubtitleIndex(undefined)
-                    }}
+                    onClick={() => setSelectedSubtitleIndex(undefined)}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       {selectedSubtitleIndex === undefined ? <Check size={16} color="#E50914" /> : <div style={{ width: 16 }} />}
@@ -1020,9 +1456,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
                       <button
                         key={s.Index}
                         className={`audio-sub-item ${isSelected ? 'selected' : ''}`}
-                        onClick={() => {
-                          setSelectedSubtitleIndex(s.Index)
-                        }}
+                        onClick={() => setSelectedSubtitleIndex(s.Index)}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           {isSelected ? <Check size={16} color="#E50914" /> : <div style={{ width: 16 }} />}
@@ -1040,264 +1474,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           </div>
         </div>
       )}
-
-      {/* Main Controls Overlay */}
-      <div className={`player-controls-overlay ${showControls ? '' : 'hidden'}`}>
-        {/* Top bar */}
-        <div className="player-top-bar">
-          <button className="player-back-btn" onClick={onClose}>
-            <ArrowLeft size={28} />
-          </button>
-          <div className="player-title-info">
-            <span className="player-main-title">{item.SeriesName || item.Name}</span>
-            {item.SeriesName && (
-              <span className="player-sub-title">
-                {item.SeasonName ? `${item.SeasonName} • ` : ''}
-                {item.IndexNumber ? `Ep ${item.IndexNumber}: ` : ''}
-                {item.Name}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Bottom bar */}
-        <div className="player-bottom-bar">
-          {/* Netflix Interactive Debounced Scrub Bar */}
-          <div
-            className={`scrub-container ${isScrubbing ? 'is-scrubbing' : ''}`}
-            ref={scrubTrackRef}
-            onMouseDown={(e) => {
-              e.preventDefault()
-              handleScrubStart(e.clientX)
-            }}
-            onTouchStart={(e) => {
-              if (e.touches.length > 0) {
-                handleScrubStart(e.touches[0].clientX)
-              }
-            }}
-            onMouseMove={(e) => {
-              if (!isScrubbing) {
-                handleScrubMove(e.clientX, false)
-              }
-            }}
-            onMouseLeave={() => {
-              if (!isScrubbing) {
-                setHoverTime(null)
-                setHoverChapter(null)
-              }
-            }}
-          >
-            {/* Floating Hover/Drag Tooltip */}
-            {hoverTime !== null && duration > 0 && (
-              <div
-                className="scrub-tooltip"
-                style={{
-                  left: `${Math.max(2, Math.min(98, hoverPercent))}%`,
-                }}
-              >
-                <div className="scrub-tooltip-time">{formatTime(hoverTime)}</div>
-                {hoverChapter && <div className="scrub-tooltip-chapter">{hoverChapter}</div>}
-              </div>
-            )}
-
-            <div className="scrub-track">
-              {/* Buffered bar */}
-              {duration > 0 && (
-                <div
-                  className="scrub-buffered"
-                  style={{ width: `${Math.min(100, (buffered / duration) * 100)}%` }}
-                />
-              )}
-              {/* Active Progress bar */}
-              {duration > 0 && (
-                <div
-                  className="scrub-progress"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      ((isScrubbing ? scrubPosition : currentTime) / duration) * 100
-                    )}%`,
-                  }}
-                />
-              )}
-              {/* Scrub Thumb Handle */}
-              {duration > 0 && (
-                <div
-                  className={`scrub-thumb ${isScrubbing ? 'active' : ''}`}
-                  style={{
-                    left: `${Math.min(
-                      100,
-                      ((isScrubbing ? scrubPosition : currentTime) / duration) * 100
-                    )}%`,
-                  }}
-                />
-              )}
-
-              {/* Chapter Boundary Notches */}
-              {duration > 0 &&
-                item.Chapters &&
-                item.Chapters.map((chap, idx) => {
-                  const sec = chap.StartPositionTicks / 1e7
-                  if (sec <= 0 || sec >= duration) return null
-                  const pct = (sec / duration) * 100
-                  return (
-                    <div
-                      key={idx}
-                      className="scrub-chapter-marker"
-                      style={{ left: `${pct}%` }}
-                      title={chap.Name}
-                    />
-                  )
-                })}
-            </div>
-          </div>
-
-          {/* Action buttons row */}
-          <div className="player-actions-row">
-            <div className="player-actions-left">
-              <button className="player-btn" onClick={togglePlay} title={isPlaying ? 'Pause' : 'Play'}>
-                {isPlaying ? <Pause size={28} fill="white" /> : <Play size={28} fill="white" />}
-              </button>
-
-              {/* 10s Rewind */}
-              <button className="player-btn circular-seek-btn" onClick={() => skipSeconds(-10)} title="Rewind 10s">
-                <RotateCcw size={24} />
-                <span className="seek-number">10</span>
-              </button>
-
-              {/* 10s Forward */}
-              <button className="player-btn circular-seek-btn" onClick={() => skipSeconds(10)} title="Forward 10s">
-                <RotateCw size={24} />
-                <span className="seek-number">10</span>
-              </button>
-
-              {/* Volume */}
-              <div className="volume-container">
-                <button
-                  className="player-btn"
-                  onClick={() => {
-                    const next = !isMuted
-                    setIsMuted(next)
-                    if (videoRef.current) videoRef.current.muted = next
-                  }}
-                >
-                  {isMuted || volume === 0 ? <VolumeX size={24} /> : <Volume2 size={24} />}
-                </button>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  className="volume-slider"
-                  value={isMuted ? 0 : volume}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value)
-                    setVolume(val)
-                    setIsMuted(val === 0)
-                    if (videoRef.current) {
-                      videoRef.current.volume = val
-                      videoRef.current.muted = val === 0
-                    }
-                  }}
-                />
-              </div>
-
-              <span className="time-display">
-                {formatTime(isScrubbing ? scrubPosition : currentTime)} / {formatTime(duration)}
-              </span>
-            </div>
-
-            <div className="player-actions-right">
-              {/* Next Episode Button */}
-              {nextEpisode && (
-                <button
-                  className="player-btn"
-                  onClick={handlePlayNextEpisode}
-                  title={`Next: ${nextEpisode.Name}`}
-                >
-                  <SkipForward size={22} />
-                </button>
-              )}
-
-              {/* Series Episodes Drawer Button */}
-              {item.SeriesId && (
-                <button
-                  className="player-btn"
-                  title="Episodes"
-                  onClick={() => {
-                    setShowEpisodesDrawer(!showEpisodesDrawer)
-                    setShowAudioSubModal(false)
-                  }}
-                >
-                  <Layers size={22} />
-                </button>
-              )}
-
-              {/* Audio & Subtitles 2-Column Menu Button */}
-              <button
-                className="player-btn"
-                title="Audio & Subtitles"
-                onClick={() => {
-                  setShowAudioSubModal(!showAudioSubModal)
-                  setShowEpisodesDrawer(false)
-                }}
-              >
-                <Subtitles size={22} />
-              </button>
-
-              {/* Playback Speed Menu */}
-              <div style={{ position: 'relative' }}>
-                <button
-                  className="player-btn"
-                  title="Playback Speed"
-                  onClick={() => setShowSpeedMenu(!showSpeedMenu)}
-                >
-                  <Gauge size={22} />
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, marginLeft: 2 }}>{playbackSpeed}x</span>
-                </button>
-                {showSpeedMenu && (
-                  <div className="dropdown-menu" style={{ bottom: '45px', top: 'auto', right: 0, minWidth: 120 }}>
-                    {[0.5, 0.75, 1, 1.25, 1.5, 2].map((spd) => (
-                      <button
-                        key={spd}
-                        className="dropdown-item"
-                        style={{ color: playbackSpeed === spd ? '#E50914' : 'inherit' }}
-                        onClick={() => {
-                          setPlaybackSpeed(spd)
-                          if (videoRef.current) videoRef.current.playbackRate = spd
-                          setShowSpeedMenu(false)
-                        }}
-                      >
-                        {spd}x {spd === 1 ? '(Normal)' : ''}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Picture-in-Picture */}
-              <button className="player-btn" title="Picture in Picture" onClick={togglePiP}>
-                <PictureInPicture size={22} />
-              </button>
-
-              {/* Stats for Nerds */}
-              <button
-                className="player-btn"
-                title="Stats for Nerds (S)"
-                style={{ color: showStatsForNerds ? '#E50914' : 'inherit' }}
-                onClick={() => setShowStatsForNerds(!showStatsForNerds)}
-              >
-                <Activity size={22} />
-              </button>
-
-              {/* Fullscreen */}
-              <button className="player-btn" onClick={toggleFullscreen} title="Fullscreen (F)">
-                {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import type { JellyfinItem } from './types/jellyfin'
 import { jellyfinApi } from './api/jellyfin'
 import { Navbar } from './components/Navbar'
+import { MobileBottomNav } from './components/MobileBottomNav'
+import { InstallPwaBanner } from './components/InstallPwaBanner'
 import { DetailModal } from './components/DetailModal'
 import { VideoPlayer } from './components/VideoPlayer'
 import { ProfilePicker } from './components/ProfilePicker'
@@ -14,10 +16,12 @@ import { SeriesPage } from './pages/SeriesPage'
 import { MyListPage } from './pages/MyListPage'
 import { SearchPage } from './pages/SearchPage'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
+import { usePWA } from './hooks/usePWA'
 import { fuzzySearch } from './services/fuzzySearch'
 
 const MainApp: React.FC = () => {
   const { user, isLoading } = useAuth()
+  const { isInstalled, installApp } = usePWA()
   const [activeTab, setActiveTab] = useState<'home' | 'series' | 'movies' | 'latest' | 'mylist' | 'search'>('home')
   const [searchQuery, setSearchQuery] = useState('')
   const [activeMediaItem, setActiveMediaItem] = useState<JellyfinItem | null>(null)
@@ -168,7 +172,7 @@ const MainApp: React.FC = () => {
         onOpenServerSettings={() => setShowServerModal(true)}
       />
 
-      <main style={{ flex: 1 }}>
+      <main style={{ flex: 1, paddingBottom: '70px' }}>
         {activeTab === 'home' && (
           <HomePage
             onPlay={handlePlay}
@@ -221,6 +225,20 @@ const MainApp: React.FC = () => {
         )}
       </main>
 
+      {/* Mobile Bottom Navigation Bar */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        setActiveTab={(tab) => {
+          setActiveTab(tab as any)
+          if (tab !== 'search') setSearchQuery('')
+        }}
+        onOpenSearch={() => setActiveTab('search')}
+        onOpenSettings={() => setShowServerModal(true)}
+      />
+
+      {/* Install PWA Prompt Banner for Mobile */}
+      <InstallPwaBanner onInstall={installApp} isInstalled={isInstalled} />
+
       {/* Detail Modal ("More Info") */}
       {detailModalItem && (
         <DetailModal
@@ -237,7 +255,7 @@ const MainApp: React.FC = () => {
         />
       )}
 
-      {/* Fullscreen Video Player */}
+      {/* Fullscreen / YouTube-Style Video Player */}
       {activeMediaItem && (
         <VideoPlayer
           item={activeMediaItem}
