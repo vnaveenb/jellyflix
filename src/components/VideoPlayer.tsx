@@ -103,6 +103,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isCinemaFullscreen, setIsCinemaFullscreen] = useState(false)
+  const lastActionTimeRef = useRef(0)
+  const safeTrigger = useCallback((fn: () => void) => (e: React.SyntheticEvent) => {
+    e.stopPropagation()
+    const now = Date.now()
+    if (now - lastActionTimeRef.current < 250) return
+    lastActionTimeRef.current = now
+    fn()
+  }, [])
   const [showControls, setShowControls] = useState(true)
   const [isHlsFallback, setIsHlsFallback] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
@@ -119,7 +128,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       const portrait = window.innerHeight > window.innerWidth
       setIsMobile(mobile)
       setIsPortrait(portrait)
-      setIsFullscreen(!!document.fullscreenElement)
+      if (document.fullscreenElement) {
+        setIsFullscreen(true)
+      } else {
+        setIsFullscreen(false)
+      }
     }
     window.addEventListener('resize', handleResize)
     window.addEventListener('orientationchange', handleResize)
@@ -131,7 +144,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     }
   }, [])
 
-  const isMobilePortrait = isMobile && isPortrait && !isFullscreen
+  const isMobilePortrait = isMobile && isPortrait && !isCinemaFullscreen && !isFullscreen
 
   // Netflix Interactive Scrub Bar States
   const [isScrubbing, setIsScrubbing] = useState(false)
@@ -450,6 +463,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
   // Double tap handler for mobile video
   const handleMobileVideoTouch = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation()
     const now = Date.now()
     const touch = e.changedTouches[0]
     if (!touch) return
@@ -571,19 +585,48 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     }
   }, [handleScrubMove, handleScrubEnd])
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      if (containerRef.current?.requestFullscreen) {
-        containerRef.current.requestFullscreen().catch(() => {})
-      }
+  const toggleFullscreen = useCallback(() => {
+    const isCurrentlyFs = isCinemaFullscreen || isFullscreen || !!document.fullscreenElement
+
+    if (!isCurrentlyFs) {
+      setIsCinemaFullscreen(true)
       setIsFullscreen(true)
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {})
+
+      const container = containerRef.current
+      if (container) {
+        if (container.requestFullscreen) {
+          container.requestFullscreen().catch(() => {})
+        } else if ((container as any).webkitRequestFullscreen) {
+          (container as any).webkitRequestFullscreen()
+        }
+      } else if (videoRef.current && (videoRef.current as any).webkitEnterFullscreen) {
+        (videoRef.current as any).webkitEnterFullscreen()
       }
+
+      try {
+        if (screen.orientation && (screen.orientation as any).lock) {
+          (screen.orientation as any).lock("landscape").catch(() => {})
+        }
+      } catch {}
+    } else {
+      setIsCinemaFullscreen(false)
       setIsFullscreen(false)
+
+      if (document.fullscreenElement) {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {})
+        } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen()
+        }
+      }
+
+      try {
+        if (screen.orientation && (screen.orientation as any).unlock) {
+          (screen.orientation as any).unlock()
+        }
+      } catch {}
     }
-  }
+  }, [isCinemaFullscreen, isFullscreen])
 
   const togglePiP = async () => {
     if (!videoRef.current) return
@@ -725,7 +768,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       )}
 
       {/* Main Video Viewport (Continuously mounted so streaming never restarts!) */}
-      <div className="video-viewport-wrapper" onTouchEnd={isMobilePortrait ? handleMobileVideoTouch : undefined}>
+      <div className="video-viewport-wrapper">
         <video
           ref={videoRef}
           className="video-element"
@@ -741,6 +784,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           onPause={() => setIsPlaying(false)}
           onClick={!isMobilePortrait ? togglePlay : undefined}
         />
+
+        {/* Dedicated touch gesture surface for mobile video */}
+        {isMobilePortrait && (
+          <div
+            className="mobile-yt-gesture-surface"
+            onTouchEnd={handleMobileVideoTouch}
+          />
+        )}
 
         {/* Subtitle Overlay */}
         {activeSubtitleText && (
@@ -803,42 +854,71 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
         {/* --- MOBILE YOUTUBE OVERLAY (Shown on 16:9 docked video in portrait mode) --- */}
         {isMobilePortrait && (
-          <div className={`mobile-yt-overlay ${showControls ? 'visible' : 'hidden'}`}>
+          <div
+            className={`mobile-yt-overlay ${showControls ? 'visible' : 'hidden'}`}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowControls(false)
+              }
+            }}
+          >
             <div className="mobile-yt-top-row">
-              <button className="mobile-yt-btn" onClick={onClose} aria-label="Close">
-                <ArrowLeft size={22} />
+              <button
+                className="mobile-yt-btn"
+                onClick={safeTrigger(onClose)}
+                onTouchEnd={safeTrigger(onClose)}
+                aria-label="Back"
+              >
+                <ArrowLeft size={24} />
               </button>
               <span className="mobile-yt-header-title">{item.SeriesName || item.Name}</span>
               <div className="mobile-yt-top-actions">
                 <button
                   className="mobile-yt-btn"
-                  onClick={() => setShowAudioSubModal(true)}
+                  onClick={safeTrigger(() => setShowAudioSubModal(true))}
+                  onTouchEnd={safeTrigger(() => setShowAudioSubModal(true))}
                   aria-label="Subtitles & Audio"
                 >
-                  <Subtitles size={20} />
+                  <Subtitles size={22} />
                 </button>
                 <button
                   className="mobile-yt-btn"
-                  onClick={toggleFullscreen}
+                  onClick={safeTrigger(toggleFullscreen)}
+                  onTouchEnd={safeTrigger(toggleFullscreen)}
                   aria-label="Fullscreen"
                 >
-                  <Maximize size={20} />
+                  <Maximize size={22} />
                 </button>
               </div>
             </div>
 
             {/* Center Play/Rewind/Forward Controls */}
             <div className="mobile-yt-center-row">
-              <button className="mobile-yt-center-btn" onClick={() => skipSeconds(-10)}>
+              <button
+                className="mobile-yt-center-btn"
+                onClick={safeTrigger(() => skipSeconds(-10))}
+                onTouchEnd={safeTrigger(() => skipSeconds(-10))}
+                aria-label="Rewind 10s"
+              >
                 <RotateCcw size={28} />
                 <span className="mobile-yt-seek-num">10</span>
               </button>
 
-              <button className="mobile-yt-center-play-btn" onClick={togglePlay}>
+              <button
+                className="mobile-yt-center-play-btn"
+                onClick={safeTrigger(togglePlay)}
+                onTouchEnd={safeTrigger(togglePlay)}
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+              >
                 {isPlaying ? <Pause size={34} fill="#fff" /> : <Play size={34} fill="#fff" />}
               </button>
 
-              <button className="mobile-yt-center-btn" onClick={() => skipSeconds(10)}>
+              <button
+                className="mobile-yt-center-btn"
+                onClick={safeTrigger(() => skipSeconds(10))}
+                onTouchEnd={safeTrigger(() => skipSeconds(10))}
+                aria-label="Forward 10s"
+              >
                 <RotateCw size={28} />
                 <span className="mobile-yt-seek-num">10</span>
               </button>
@@ -851,8 +931,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
                 className="mobile-yt-scrub-bar"
                 ref={mobileScrubTrackRef}
                 onTouchStart={(e) => {
+                  e.stopPropagation()
                   if (e.touches.length > 0) handleScrubStart(e.touches[0].clientX, mobileScrubTrackRef)
                 }}
+                onTouchEnd={(e) => e.stopPropagation()}
               >
                 <div
                   className="mobile-yt-scrub-buf"
@@ -869,8 +951,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
                 />
               </div>
               <span className="mobile-yt-time">{formatTime(duration)}</span>
-              <button className="mobile-yt-btn" onClick={toggleFullscreen}>
-                <Maximize size={18} />
+              <button
+                className="mobile-yt-btn"
+                onClick={safeTrigger(toggleFullscreen)}
+                onTouchEnd={safeTrigger(toggleFullscreen)}
+                aria-label="Fullscreen"
+              >
+                <Maximize size={20} />
               </button>
             </div>
           </div>
@@ -1157,7 +1244,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           <div className="mobile-yt-action-pills">
             <button
               className="yt-pill-btn"
-              onClick={() => setShowAudioSubModal(true)}
+              onClick={safeTrigger(() => setShowAudioSubModal(true))}
+              onTouchEnd={safeTrigger(() => setShowAudioSubModal(true))}
             >
               <Subtitles size={16} color="#E50914" />
               <span>Audio / Subs</span>
@@ -1383,12 +1471,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
       {/* Audio & Subtitles Modal (Responsive for Mobile & Desktop) */}
       {showAudioSubModal && (
-        <div className="audio-sub-modal-overlay" onClick={() => setShowAudioSubModal(false)}>
-          <div className="audio-sub-modal" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="audio-sub-modal-overlay"
+          onClick={() => setShowAudioSubModal(false)}
+          onTouchEnd={(e) => {
+            if (e.target === e.currentTarget) setShowAudioSubModal(false)
+          }}
+        >
+          <div
+            className="audio-sub-modal"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
+          >
             <div className="audio-sub-header">
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Audio & Subtitles</h3>
-              <button onClick={() => setShowAudioSubModal(false)} style={{ color: '#fff' }}>
-                <X size={20} />
+              <button
+                onClick={safeTrigger(() => setShowAudioSubModal(false))}
+                onTouchEnd={safeTrigger(() => setShowAudioSubModal(false))}
+                style={{ color: '#fff', background: 'none', border: 'none', padding: 8, cursor: 'pointer' }}
+                aria-label="Close"
+              >
+                <X size={24} />
               </button>
             </div>
 

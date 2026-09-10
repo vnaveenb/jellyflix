@@ -1510,16 +1510,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, .nav-item-focused {
 
 /* Netflix 2-Column Audio & Subtitles Panel */
 .audio-sub-modal-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  z-index: 220;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(0, 0, 0, 0.85) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  z-index: 700 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
 }
 
 .audio-sub-modal {
@@ -2011,28 +2011,42 @@ button:focus-visible, a:focus-visible, input:focus-visible, .nav-item-focused {
   object-fit: contain;
 }
 
+/* Dedicated gesture surface */
+.mobile-yt-gesture-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: transparent;
+  touch-action: manipulation;
+}
+
 /* Mobile YouTube On-Video Controls Overlay */
 .mobile-yt-overlay {
   position: absolute;
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0.75) 0%,
-    rgba(0, 0, 0, 0.05) 35%,
-    rgba(0, 0, 0, 0.05) 65%,
-    rgba(0, 0, 0, 0.85) 100%
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(0, 0, 0, 0.1) 35%,
+    rgba(0, 0, 0, 0.1) 65%,
+    rgba(0, 0, 0, 0.9) 100%
   );
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 8px 10px;
   transition: opacity 0.25s ease;
-  z-index: 10;
+  z-index: 20;
 }
 
 .mobile-yt-overlay.hidden {
   opacity: 0;
-  pointer-events: none;
+  pointer-events: none !important;
+}
+
+.mobile-yt-overlay.visible {
+  opacity: 1;
+  pointer-events: auto !important;
 }
 
 .mobile-yt-top-row {
@@ -2040,6 +2054,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, .nav-item-focused {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  position: relative;
+  z-index: 25;
 }
 
 .mobile-yt-header-title {
@@ -2059,8 +2075,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, .nav-item-focused {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px;
   cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  position: relative;
+  z-index: 30;
+}
+
+.mobile-yt-btn:active {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .mobile-yt-top-actions {
