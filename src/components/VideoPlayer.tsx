@@ -81,9 +81,14 @@ interface VideoPlayerProps {
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onClose }) => {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const scrubTrackRef = useRef<HTMLDivElement>(null)
+  const isScrubbingRef = useRef<boolean>(false)
+  const scrubTimeRef = useRef<number>(0)
+  const durationRef = useRef<number>(0)
+  const wasPlayingBeforeScrub = useRef<boolean>(false)
   const hlsRef = useRef<Hls | null>(null)
   const progressIntervalRef = useRef<number | null>(null)
   const hideControlsTimerRef = useRef<number | null>(null)
@@ -100,6 +105,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   const [isHlsFallback, setIsHlsFallback] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [showSpeedMenu, setShowSpeedMenu] = useState(false)
+
+  // Netflix Interactive Scrub Bar States
+  const [isScrubbing, setIsScrubbing] = useState(false)
+  const [scrubPosition, setScrubPosition] = useState(0)
+  const [hoverTime, setHoverTime] = useState<number | null>(null)
+  const [hoverPercent, setHoverPercent] = useState<number>(0)
+  const [hoverChapter, setHoverChapter] = useState<string | null>(null)
 
   // Netflix Seek Ripple feedback (+10 / -10)
   const [seekFeedback, setSeekFeedback] = useState<{ type: 'forward' | 'rewind'; amount: number } | null>(null)
@@ -133,7 +145,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
   // Load detailed item streams & chapters
   useEffect(() => {
-    if (!user) return
+    if (!user || item.Type === 'Series' || item.Type === 'Season') return
     jellyfinApi.getItem(user.Id, item.Id).then((full) => {
       setItem(full)
       const streams =
@@ -254,11 +266,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     [item.Id, selectedAudioIndex, selectedSubtitleIndex]
   )
 
-  // Start stream (Direct play with Direct Stream Remux for alternate audio)
+  // Start stream (Direct play for native mp4/webm, HLS stream copy remux for mkv/transcoded audio)
   const startStream = useCallback(
     (useHls: boolean, audioIdx?: number, seekSeconds?: number) => {
       const video = videoRef.current
       if (!video) return
+
+      // TV Series / Seasons are containers, not playable streams
+      if (item.Type === 'Series' || item.Type === 'Season') {
+        console.warn('Cannot stream Series entity directly, waiting for episode resolution')
+        return
+      }
 
       if (hlsRef.current) {
         hlsRef.current.destroy()
@@ -277,7 +295,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           : (item.UserData?.PlaybackPositionTicks || 0) / (1000 * 10000)
       const targetTicks = Math.floor(targetSeconds * 1000 * 10000)
 
-      if (!useHls && !isAlternateAudio) {
+      const container = (item.Container || item.MediaSources?.[0]?.Container || '').toLowerCase()
+      // Web browsers cannot perform instant random seeking in raw MKV files over HTTP byte ranges
+      const isDirectCompatible = (container === 'mp4' || container === 'm4v' || container === 'webm') && !isAlternateAudio && !useHls
+
+      if (isDirectCompatible) {
         setIsAudioRemux(false)
         const directUrl = jellyfinApi.getDirectStreamUrl(item.Id)
         video.src = directUrl
@@ -300,18 +322,33 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
         const hlsUrl = jellyfinApi.getHlsStreamUrl(item.Id, {
           audioStreamIndex: currentAudio,
           videoCodec: 'copy', // Stream copy video (ZERO CPU/GPU transcoding!)
-          audioCodec: 'aac',
-          startTimeTicks: targetTicks,
+          audioCodec: 'aac,mp3',
         })
 
         if (Hls.isSupported()) {
           const hls = new Hls({
             enableWorker: true,
-            lowLatencyMode: true,
+            backBufferLength: 30, // Retain 30s buffer for instant 0ms 10s rewinds!
+            maxBufferLength: 30,
+            maxMaxBufferLength: 60,
+            maxBufferSize: 60 * 1000 * 1000,
+            lowLatencyMode: false,
+            autoStartLoad: true,
+            startPosition: targetSeconds > 0 ? targetSeconds : -1,
+            xhrSetup: (xhr) => {
+              const authToken = token || jellyfinApi.getToken()
+              if (authToken) {
+                xhr.setRequestHeader('Authorization', `MediaBrowser Token="${authToken}"`)
+                xhr.setRequestHeader('X-MediaBrowser-Token', authToken)
+              }
+            },
           })
           hls.loadSource(hlsUrl)
           hls.attachMedia(video)
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            if (targetSeconds > 0 && Math.abs(video.currentTime - targetSeconds) > 1) {
+              video.currentTime = targetSeconds
+            }
             video.play().catch(() => {})
           })
           hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -332,7 +369,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           hlsRef.current = hls
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = hlsUrl
-          video.play().catch(() => {})
+          video.onloadedmetadata = () => {
+            if (targetSeconds > 0) {
+              video.currentTime = targetSeconds
+            }
+            video.play().catch(() => {})
+          }
         }
       }
 
@@ -340,13 +382,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
         ItemId: item.Id,
         PositionTicks: targetTicks,
         IsPaused: false,
-        PlayMethod: useHls || isAlternateAudio ? 'DirectStream' : 'DirectPlay',
+        PlayMethod: isDirectCompatible ? 'DirectPlay' : 'DirectStream',
       })
     },
-    [item, selectedAudioIndex, audioStreams]
+    [item, selectedAudioIndex, audioStreams, token]
   )
 
   useEffect(() => {
+    // If passed a Series or Season, resolve the playable episode first!
+    if (item.Type === 'Series' || item.Type === 'Season') {
+      if (!user) return
+      const seriesId = item.Type === 'Series' ? item.Id : (item.SeriesId || item.Id)
+      jellyfinApi
+        .getNextUp(user.Id, seriesId)
+        .then((nextUp) => {
+          if (nextUp?.Items && nextUp.Items.length > 0) {
+            setItem(nextUp.Items[0])
+            return
+          }
+          jellyfinApi.getEpisodes(seriesId, undefined, user.Id).then((eps) => {
+            if (eps?.Items && eps.Items.length > 0) {
+              setItem(eps.Items[0])
+            }
+          })
+        })
+        .catch((err) => {
+          console.error('Failed to resolve episode for series playback:', err)
+        })
+      return
+    }
+
     startStream(isHlsFallback)
 
     progressIntervalRef.current = window.setInterval(() => {
@@ -374,7 +439,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
         hlsRef.current.destroy()
       }
     }
-  }, [startStream, isHlsFallback, item.Id, reportProgress])
+  }, [startStream, isHlsFallback, item.Id, item.Type, reportProgress, user])
 
   // Mouse activity
   const handleMouseMove = () => {
@@ -416,17 +481,115 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     setTimeout(() => setSeekFeedback(null), 800)
   }
 
-  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+  // Calculate percentage and target seconds from clientX on scrubber
+  const calculateScrubTimeFromEvent = useCallback((clientX: number) => {
+    const track = scrubTrackRef.current
+    if (!track) return { percent: 0, time: 0 }
+    const rect = track.getBoundingClientRect()
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width))
+    const percent = rect.width > 0 ? x / rect.width : 0
+    const dur = durationRef.current || (videoRef.current?.duration || 0)
+    const time = percent * dur
+    return { percent: percent * 100, time }
+  }, [])
+
+  // Find chapter for a given time
+  const getChapterForTime = useCallback(
+    (time: number) => {
+      if (!item.Chapters || item.Chapters.length === 0) return null
+      const match = [...item.Chapters].reverse().find((c) => c.StartPositionTicks / 1e7 <= time)
+      return match?.Name || null
+    },
+    [item.Chapters]
+  )
+
+  // Start scrubbing on mouse/touch down
+  const handleScrubStart = (clientX: number) => {
     const video = videoRef.current
-    if (!video || !duration) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const clickX = e.clientX - rect.left
-    const percent = Math.max(0, Math.min(1, clickX / rect.width))
-    const targetTime = percent * duration
-    video.currentTime = targetTime
-    setCurrentTime(targetTime)
-    reportProgress(video.paused, 'Seek')
+    if (!video) return
+    const { percent, time } = calculateScrubTimeFromEvent(clientX)
+
+    isScrubbingRef.current = true
+    scrubTimeRef.current = time
+    wasPlayingBeforeScrub.current = !video.paused
+
+    setIsScrubbing(true)
+    setScrubPosition(time)
+    setHoverPercent(percent)
+    setHoverTime(time)
+    setHoverChapter(getChapterForTime(time))
   }
+
+  // Scrub move (hover or active drag)
+  const handleScrubMove = useCallback(
+    (clientX: number, isDragging: boolean) => {
+      const { percent, time } = calculateScrubTimeFromEvent(clientX)
+      setHoverPercent(percent)
+      setHoverTime(time)
+      setHoverChapter(getChapterForTime(time))
+
+      if (isDragging) {
+        scrubTimeRef.current = time
+        setScrubPosition(time)
+      }
+    },
+    [calculateScrubTimeFromEvent, getChapterForTime]
+  )
+
+  // Commit seek on mouse/touch release
+  const handleScrubEnd = useCallback(() => {
+    if (!isScrubbingRef.current) return
+    isScrubbingRef.current = false
+    setIsScrubbing(false)
+
+    const video = videoRef.current
+    if (!video) return
+
+    const commitTime = scrubTimeRef.current
+    video.currentTime = commitTime
+    setCurrentTime(commitTime)
+    reportProgress(video.paused, 'Seek')
+
+    if (wasPlayingBeforeScrub.current && video.paused) {
+      video.play().catch(() => {})
+    }
+  }, [reportProgress])
+
+  // Global window listeners for drag scrubbing outside track bounds
+  useEffect(() => {
+    const onWindowMouseMove = (e: MouseEvent) => {
+      if (isScrubbingRef.current) {
+        handleScrubMove(e.clientX, true)
+      }
+    }
+    const onWindowMouseUp = () => {
+      if (isScrubbingRef.current) {
+        handleScrubEnd()
+      }
+    }
+    const onWindowTouchMove = (e: TouchEvent) => {
+      if (isScrubbingRef.current && e.touches.length > 0) {
+        handleScrubMove(e.touches[0].clientX, true)
+      }
+    }
+    const onWindowTouchEnd = () => {
+      if (isScrubbingRef.current) {
+        handleScrubEnd()
+      }
+    }
+
+    window.addEventListener('mousemove', onWindowMouseMove)
+    window.addEventListener('mouseup', onWindowMouseUp)
+    window.addEventListener('touchmove', onWindowTouchMove, { passive: true })
+    window.addEventListener('touchend', onWindowTouchEnd)
+
+    return () => {
+      window.removeEventListener('mousemove', onWindowMouseMove)
+      window.removeEventListener('mouseup', onWindowMouseUp)
+      window.removeEventListener('touchmove', onWindowTouchMove)
+      window.removeEventListener('touchend', onWindowTouchEnd)
+    }
+  }, [handleScrubMove, handleScrubEnd])
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -466,7 +629,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     if (!video) return
     const cTime = video.currentTime
     const dur = video.duration || duration
-    setCurrentTime(cTime)
+    durationRef.current = dur
+    if (!isScrubbingRef.current) {
+      setCurrentTime(cTime)
+    }
 
     if (video.buffered.length > 0) {
       setBuffered(video.buffered.end(video.buffered.length - 1))
@@ -573,13 +739,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       onMouseMove={handleMouseMove}
       onClick={handleMouseMove}
     >
+      {/* Loading state if resolving episode */}
+      {(item.Type === 'Series' || item.Type === 'Season') && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#141414', zIndex: 10, gap: 16 }}>
+          <div className="spinner" style={{ width: 44, height: 44, border: '4px solid rgba(255,255,255,0.2)', borderTopColor: '#E50914', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <span style={{ color: '#aaa', fontSize: '0.95rem', letterSpacing: 0.5 }}>Loading Episode...</span>
+        </div>
+      )}
       <video
         ref={videoRef}
         className="video-element"
         playsInline
         onTimeUpdate={handleTimeUpdate}
         onDurationChange={() => {
-          if (videoRef.current) setDuration(videoRef.current.duration)
+          if (videoRef.current) {
+            setDuration(videoRef.current.duration)
+            durationRef.current = videoRef.current.duration
+          }
         }}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
@@ -656,10 +832,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           </div>
           <div className="nerd-stat">
             <span>Stream Mode:</span>
-            <strong style={{ color: isHlsFallback ? (isAudioRemux ? '#46d369' : '#ffaa00') : '#46d369' }}>
-              {isHlsFallback
-                ? (isAudioRemux ? 'Direct Stream Remux (Video Copy 0% CPU)' : 'HLS Transcode (Universal)')
-                : 'Direct Play (Native 0% CPU)'}
+            <strong style={{ color: '#46d369' }}>
+              {isAudioRemux
+                ? 'Direct Stream Remux (HLS Video Copy 0% CPU)'
+                : 'Direct Play (Native MP4 0% CPU)'}
             </strong>
           </div>
           <div className="nerd-stat">
@@ -771,7 +947,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       {showAudioSubModal && (
         <div className="audio-sub-modal-overlay" onClick={() => setShowAudioSubModal(false)}>
           <div className="audio-sub-modal" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <div className="audio-sub-header">
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Audio & Subtitles</h3>
               <button onClick={() => setShowAudioSubModal(false)} style={{ color: '#fff' }}>
                 <X size={20} />
@@ -782,7 +958,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
               {/* Left: Audio */}
               <div className="audio-sub-column">
                 <h4 className="audio-sub-col-title">Audio</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="audio-sub-list">
                   {audioStreams.map((a) => {
                     const isSelected = selectedAudioIndex === a.Index
                     const channelStr = a.Channels === 6 ? '5.1' : a.Channels === 8 ? '7.1' : 'Stereo'
@@ -824,7 +1000,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
                 <h4 className="audio-sub-col-title">
                   Subtitles {isSubtitleLoading && <span style={{ fontSize: '0.8rem', color: '#E50914' }}>(Loading...)</span>}
                 </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="audio-sub-list">
                   <button
                     className={`audio-sub-item ${selectedSubtitleIndex === undefined ? 'selected' : ''}`}
                     onClick={() => {
@@ -886,27 +1062,93 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
         {/* Bottom bar */}
         <div className="player-bottom-bar">
-          {/* Scrub bar */}
-          <div className="scrub-container" onClick={handleSeek}>
+          {/* Netflix Interactive Debounced Scrub Bar */}
+          <div
+            className={`scrub-container ${isScrubbing ? 'is-scrubbing' : ''}`}
+            ref={scrubTrackRef}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              handleScrubStart(e.clientX)
+            }}
+            onTouchStart={(e) => {
+              if (e.touches.length > 0) {
+                handleScrubStart(e.touches[0].clientX)
+              }
+            }}
+            onMouseMove={(e) => {
+              if (!isScrubbing) {
+                handleScrubMove(e.clientX, false)
+              }
+            }}
+            onMouseLeave={() => {
+              if (!isScrubbing) {
+                setHoverTime(null)
+                setHoverChapter(null)
+              }
+            }}
+          >
+            {/* Floating Hover/Drag Tooltip */}
+            {hoverTime !== null && duration > 0 && (
+              <div
+                className="scrub-tooltip"
+                style={{
+                  left: `${Math.max(2, Math.min(98, hoverPercent))}%`,
+                }}
+              >
+                <div className="scrub-tooltip-time">{formatTime(hoverTime)}</div>
+                {hoverChapter && <div className="scrub-tooltip-chapter">{hoverChapter}</div>}
+              </div>
+            )}
+
             <div className="scrub-track">
+              {/* Buffered bar */}
               {duration > 0 && (
                 <div
                   className="scrub-buffered"
-                  style={{ width: `${(buffered / duration) * 100}%` }}
+                  style={{ width: `${Math.min(100, (buffered / duration) * 100)}%` }}
                 />
               )}
+              {/* Active Progress bar */}
               {duration > 0 && (
                 <div
                   className="scrub-progress"
-                  style={{ width: `${(currentTime / duration) * 100}%` }}
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      ((isScrubbing ? scrubPosition : currentTime) / duration) * 100
+                    )}%`,
+                  }}
                 />
               )}
+              {/* Scrub Thumb Handle */}
               {duration > 0 && (
                 <div
-                  className="scrub-thumb"
-                  style={{ left: `${(currentTime / duration) * 100}%` }}
+                  className={`scrub-thumb ${isScrubbing ? 'active' : ''}`}
+                  style={{
+                    left: `${Math.min(
+                      100,
+                      ((isScrubbing ? scrubPosition : currentTime) / duration) * 100
+                    )}%`,
+                  }}
                 />
               )}
+
+              {/* Chapter Boundary Notches */}
+              {duration > 0 &&
+                item.Chapters &&
+                item.Chapters.map((chap, idx) => {
+                  const sec = chap.StartPositionTicks / 1e7
+                  if (sec <= 0 || sec >= duration) return null
+                  const pct = (sec / duration) * 100
+                  return (
+                    <div
+                      key={idx}
+                      className="scrub-chapter-marker"
+                      style={{ left: `${pct}%` }}
+                      title={chap.Name}
+                    />
+                  )
+                })}
             </div>
           </div>
 
@@ -961,7 +1203,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
               </div>
 
               <span className="time-display">
-                {formatTime(currentTime)} / {formatTime(duration)}
+                {formatTime(isScrubbing ? scrubPosition : currentTime)} / {formatTime(duration)}
               </span>
             </div>
 

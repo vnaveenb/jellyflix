@@ -51,8 +51,30 @@ const MainApp: React.FC = () => {
     enabled: true,
   })
 
-  const handlePlay = (item: JellyfinItem) => {
+  const handlePlay = async (item: JellyfinItem) => {
     setDetailModalItem(null)
+    if (item.Type === 'Series' || item.Type === 'Season' || item.IsFolder) {
+      if (user) {
+        try {
+          const seriesId = item.Type === 'Series' ? item.Id : (item.SeriesId || item.Id)
+          // 1. Try to resume next unwatched episode
+          const nextUp = await jellyfinApi.getNextUp(user.Id, seriesId)
+          if (nextUp?.Items && nextUp.Items.length > 0) {
+            setActiveMediaItem(nextUp.Items[0])
+            return
+          }
+          // 2. Otherwise get first episode of series or season
+          const seasonId = item.Type === 'Season' ? item.Id : undefined
+          const eps = await jellyfinApi.getEpisodes(seriesId, seasonId, user.Id)
+          if (eps?.Items && eps.Items.length > 0) {
+            setActiveMediaItem(eps.Items[0])
+            return
+          }
+        } catch (err) {
+          console.warn('Failed to resolve episode for series play:', err)
+        }
+      }
+    }
     setActiveMediaItem(item)
   }
 

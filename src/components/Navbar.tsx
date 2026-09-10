@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Search, Bell, User, Server, LogOut, Users } from 'lucide-react'
+import { Search, Bell, User, Server, LogOut, Users, Download } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { jellyfinApi } from '../api/jellyfin'
+import { usePWA } from '../hooks/usePWA'
+import { InstallPwaModal } from './InstallPwaModal'
 
 interface NavbarProps {
   activeTab: string
@@ -23,6 +25,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenServerSettings,
 }) => {
   const { user, logout } = useAuth()
+  const { isInstalled, installApp, showIOSGuide, setShowIOSGuide } = usePWA()
   const [isScrolled, setIsScrolled] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -58,7 +61,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const userAvatarUrl = user?.Id ? jellyfinApi.getUserImageUrl(user.Id, user.PrimaryImageTag) : null
 
   return (
-    <header className={`navbar ${isScrolled ? 'scrolled' : 'transparent'}`}>
+    <>
+      <header className={`navbar ${isScrolled ? 'scrolled' : 'transparent'}`}>
       <div className="navbar-left">
         <a href="#home" className="brand-logo" onClick={() => setActiveTab('home')}>
           <span>JELLYFLIX</span>
@@ -131,6 +135,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           />
         </div>
 
+        {/* Install PWA Button (Android, Windows, iOS) */}
+        {!isInstalled && (
+          <button
+            className="install-pwa-btn"
+            onClick={installApp}
+            title="Install JellyFlix App"
+            aria-label="Install JellyFlix App"
+          >
+            <Download size={15} color="#E50914" />
+            <span>Install App</span>
+          </button>
+        )}
+
         {/* Notifications Icon */}
         <button className="player-btn" title="Notifications" aria-label="Notifications">
           <Bell size={20} />
@@ -187,6 +204,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Server size={16} />
                 <span>Server Settings</span>
               </button>
+              {!isInstalled && (
+                <button
+                  className="dropdown-item"
+                  onClick={() => {
+                    setShowDropdown(false)
+                    installApp()
+                  }}
+                >
+                  <Download size={16} color="#E50914" />
+                  <span>Install JellyFlix App</span>
+                </button>
+              )}
               <div className="dropdown-divider" />
               <button
                 className="dropdown-item"
@@ -203,5 +232,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
     </header>
+    <InstallPwaModal isOpen={showIOSGuide} onClose={() => setShowIOSGuide(false)} />
+    </>
   )
 }

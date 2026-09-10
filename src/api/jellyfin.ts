@@ -35,6 +35,10 @@ export class JellyfinApi {
     this.token = token
   }
 
+  public getToken(): string | null {
+    return this.token
+  }
+
   public setServerUrl(url: string) {
     this.baseUrl = url.replace(/\/$/, '')
   }
@@ -216,14 +220,24 @@ export class JellyfinApi {
     return this.fetch<JellyfinItemsResponse>(`/Shows/${seriesId}/Seasons?${params.toString()}`)
   }
 
-  // Episodes for Season
-  async getEpisodes(seriesId: string, seasonId: string, userId: string): Promise<JellyfinItemsResponse> {
+  // Episodes for Season or entire Series
+  async getEpisodes(seriesId: string, seasonId?: string, userId?: string): Promise<JellyfinItemsResponse> {
     const params = new URLSearchParams({
-      UserId: userId,
-      SeasonId: seasonId,
       Fields: 'Overview,PrimaryImageAspectRatio,UserData,MediaSources,MediaStreams,Chapters,Path,Size',
     })
+    if (userId) params.set('UserId', userId)
+    if (seasonId) params.set('SeasonId', seasonId)
     return this.fetch<JellyfinItemsResponse>(`/Shows/${seriesId}/Episodes?${params.toString()}`)
+  }
+
+  // Next up episode for series or user
+  async getNextUp(userId: string, seriesId?: string): Promise<JellyfinItemsResponse> {
+    const params = new URLSearchParams({
+      UserId: userId,
+      Fields: 'Overview,PrimaryImageAspectRatio,UserData,MediaSources,MediaStreams,Chapters,Path,Size',
+    })
+    if (seriesId) params.set('SeriesId', seriesId)
+    return this.fetch<JellyfinItemsResponse>(`/Shows/NextUp?${params.toString()}`)
   }
 
   // Find Next Episode in Series

@@ -142,13 +142,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
               <div className="hero-actions" style={{ flexWrap: 'wrap' }}>
                 <button
                   className="btn-play"
-                  onClick={() => {
-                    if (episodes.length > 0) {
-                      onPlay(episodes[0])
-                    } else {
-                      onPlay(item)
-                    }
-                  }}
+                  onClick={() => onPlay(item)}
                 >
                   <Play size={20} fill="#000" />
                   <span>Play</span>

@@ -76,6 +76,7 @@ export interface JellyfinItem {
   OriginalTitle?: string
   Overview?: string
   Type: 'Movie' | 'Series' | 'Episode' | 'Season' | 'CollectionFolder' | 'BoxSet' | 'Folder' | string
+  IsFolder?: boolean
   ProductionYear?: number
   PremiereDate?: string
   EndDate?: string
