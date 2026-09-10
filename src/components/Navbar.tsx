@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Search, Bell, User, Server, LogOut, Users, Download, X, Wifi, WifiOff } from 'lucide-react'
+import { Search, Bell, User, Server, LogOut, Users, Download, X, Wifi, WifiOff, ChevronDown, Shield } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useOffline } from '../context/OfflineContext'
 import { jellyfinApi } from '../api/jellyfin'
@@ -41,6 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isScrolled, setIsScrolled] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const [avatarError, setAvatarError] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const mobileInputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -76,7 +77,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   }
 
-  const userAvatarUrl = user?.Id ? jellyfinApi.getUserImageUrl(user.Id, user.PrimaryImageTag) : null
+  const userAvatarUrl = user?.Id && user?.PrimaryImageTag && !avatarError ? jellyfinApi.getUserImageUrl(user.Id, user.PrimaryImageTag) : null
 
   return (
     <>
@@ -231,23 +232,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                   setShowDropdown(!showDropdown)
                 }
               }}
-              title={user?.Name || 'User'}
+              title={user?.Name ? `${user.Name} - Account & Settings` : 'Account & Settings'}
               aria-label="User menu"
             >
               {userAvatarUrl ? (
                 <img
                   src={userAvatarUrl}
-                  alt={user?.Name}
+                  alt={user?.Name || 'User'}
                   className="avatar-img"
-                  onError={(e) => {
-                    ;(e.target as HTMLElement).style.display = 'none'
-                  }}
+                  onError={() => setAvatarError(true)}
                 />
               ) : (
-                <div className="avatar-img">
+                <div className="avatar-img fallback">
                   {user?.Name ? user.Name.charAt(0).toUpperCase() : <User size={18} />}
                 </div>
               )}
+              <span className="user-name-label">{user?.Name || 'Account'}</span>
+              <ChevronDown size={14} className={`dropdown-chevron ${showDropdown ? 'rotated' : ''}`} />
             </button>
 
             {showDropdown && (
@@ -265,8 +266,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                       onOpenAccount()
                     }}
                   >
-                    <User size={16} color="#E50914" />
-                    <span>Account & Security</span>
+                    <Shield size={16} color="#E50914" />
+                    <span>Account & Password</span>
                   </button>
                 )}
                 <button

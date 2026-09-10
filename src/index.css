@@ -203,6 +203,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, .nav-item-focused {
 }
 
 @media (max-width: 768px) {
+  .user-name-label,
+  .dropdown-chevron {
+    display: none !important;
+  }
+  .user-avatar-btn {
+    padding: 0 !important;
+    border: none !important;
+    background: none !important;
+  }
   .install-pwa-btn span {
     display: none;
   }
@@ -253,25 +262,97 @@ button:focus-visible, a:focus-visible, input:focus-visible, .nav-item-focused {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: none;
-  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
   cursor: pointer;
-  padding: 4px;
+  padding: 3px 10px 3px 3px;
+  transition: all 0.2s ease;
+  min-height: 36px;
+}
+
+.user-avatar-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .avatar-img {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, #e50914, #831010);
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e50914, #b20710);
   object-fit: cover;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.user-name-label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #fff;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown-chevron {
+  color: #888;
+  transition: transform 0.2s ease;
+}
+
+.dropdown-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.dropdown-user-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 10px 16px;
+}
+
+.dropdown-user-avatar {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 50%;
+  background: #E50914;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.dropdown-user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdown-user-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.dropdown-user-role {
+  font-size: 0.72rem;
+  color: #888;
+  text-transform: capitalize;
+}
+
+.dropdown-item.signout-item:hover {
+  background: rgba(229, 9, 20, 0.12);
 }
 
 .dropdown-menu {
