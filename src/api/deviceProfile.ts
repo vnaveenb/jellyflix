@@ -163,7 +163,7 @@ export function buildDeviceProfile(maxStreamingBitrate = 120_000_000): DevicePro
   ]
 
   return {
-    Name: 'JellyTube Web',
+    Name: 'JellyFlix Web',
     MaxStreamingBitrate: maxStreamingBitrate,
     MaxStaticBitrate: maxStreamingBitrate,
     MusicStreamingTranscodingBitrate: 384_000,

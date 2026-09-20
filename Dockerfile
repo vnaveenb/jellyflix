@@ -1,4 +1,4 @@
-# Multi-stage production build for JellyFlix
+# Multi-stage production build for JellyTube
 FROM node:22-alpine AS builder
 
 WORKDIR /app
@@ -13,7 +13,12 @@ RUN npm run build
 FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# nginx:alpine's entrypoint runs envsubst over /etc/nginx/templates/*.template,
+# so the Jellyfin upstream is configurable at run time instead of baked into the image.
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+
+ENV JELLYFIN_UPSTREAM=http://host.docker.internal:8097
 
 EXPOSE 80
 

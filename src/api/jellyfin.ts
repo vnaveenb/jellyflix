@@ -14,9 +14,9 @@ import type {
 } from '../types/jellyfin'
 import { buildDeviceProfile } from './deviceProfile'
 
-const CLIENT_NAME = 'JellyTube'
+const CLIENT_NAME = 'JellyFlix'
 const CLIENT_VERSION = '2.0.0'
-const DEVICE_NAME = 'JellyTube Web'
+const DEVICE_NAME = 'JellyFlix Web'
 
 export function getDeviceId(): string {
   let id = localStorage.getItem('jellyflix_device_id')
@@ -603,10 +603,13 @@ export class JellyfinApi {
 
   // Fetch Subtitle WebVTT Content directly
   async fetchSubtitleVtt(itemId: string, mediaSourceId: string, index: number): Promise<string> {
-    const url = this.getSubtitleUrl(itemId, mediaSourceId, index)
+    // Fetched with header auth so the token never lands in a URL.
+    const apiBase = this.getApiBase()
+    const url = `${apiBase}/Videos/${itemId}/${mediaSourceId}/Subtitles/${index}/Stream.vtt`
     const response = await fetch(url, {
       headers: {
         Authorization: this.getAuthHeader(),
+        ...(this.token ? { 'X-MediaBrowser-Token': this.token } : {}),
       },
     })
     if (!response.ok) {

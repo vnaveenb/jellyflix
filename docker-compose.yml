@@ -10,4 +10,5 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - VITE_JELLYFIN_URL=http://host.docker.internal:8097
+      # Where this container proxies /jellyfin-api to. Applied at container start.
+      - JELLYFIN_UPSTREAM=http://host.docker.internal:8097
