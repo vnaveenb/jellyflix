@@ -21,8 +21,15 @@ import {
   Download,
   CheckCircle2,
 } from 'lucide-react'
-import type { JellyfinItem, JellyfinMediaStream, MediaSegment, MediaSegmentType } from '../types/jellyfin'
+import type {
+  JellyfinItem,
+  JellyfinMediaStream,
+  MediaSegment,
+  MediaSegmentType,
+  TrickplayInfo,
+} from '../types/jellyfin'
 import { jellyfinApi } from '../api/jellyfin'
+import { computeTrickplayFrame } from '../services/trickplay'
 import { useAuth } from '../context/AuthContext'
 import { useOffline } from '../context/OfflineContext'
 
@@ -109,6 +116,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 })
 
   const [item, setItem] = useState<JellyfinItem>(initialItem)
+
+  // startStream must not re-identify when these change, or the video would reload
+  // every time the user toggles a subtitle track or the item object is refreshed.
+  const itemRef = useRef<JellyfinItem>(initialItem)
+  const selectedAudioIndexRef = useRef<number | undefined>(undefined)
+  const selectedSubtitleIndexRef = useRef<number | undefined>(undefined)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -198,6 +211,37 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   // Chapters & Skip Intro
   const [mediaSegments, setMediaSegments] = useState<MediaSegment[]>([])
   const [activeSegment, setActiveSegment] = useState<MediaSegment | null>(null)
+  const [trickplay, setTrickplay] = useState<{ info: TrickplayInfo; sourceId: string } | null>(null)
+
+  // Scrub-bar thumbnail sheets, served natively by Jellyfin 12 when trickplay images exist.
+  useEffect(() => {
+    if (isOffline) {
+      setTrickplay(null)
+      return
+    }
+    const sourceId = item.MediaSources?.[0]?.Id || item.Id
+    const info = jellyfinApi.selectTrickplayResolution(item.Trickplay, sourceId, 320)
+    setTrickplay(info ? { info, sourceId } : null)
+  }, [item.Trickplay, item.MediaSources, item.Id, isOffline])
+
+  /** Maps a timestamp onto its tile within the generated trickplay sheet grid. */
+  const trickplayFrameFor = useCallback(
+    (timeSeconds: number) => {
+      if (!trickplay) return null
+      const frame = computeTrickplayFrame(trickplay.info, timeSeconds)
+      if (!frame) return null
+      return {
+        ...frame,
+        url: jellyfinApi.getTrickplayTileUrl(
+          item.Id,
+          trickplay.info.Width,
+          frame.sheetIndex,
+          trickplay.sourceId
+        ),
+      }
+    },
+    [trickplay, item.Id]
+  )
 
   // Native media segments (Jellyfin 12) drive skip buttons and end-of-episode handoff.
   useEffect(() => {
@@ -306,6 +350,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       .then((next) => setNextEpisode(next))
   }, [item, user])
 
+  // Keep refs in sync so startStream can read current selections without re-identifying.
+  useEffect(() => {
+    itemRef.current = item
+  }, [item])
+
+  useEffect(() => {
+    selectedAudioIndexRef.current = selectedAudioIndex
+  }, [selectedAudioIndex])
+
+  useEffect(() => {
+    selectedSubtitleIndexRef.current = selectedSubtitleIndex
+  }, [selectedSubtitleIndex])
+
   const formatTime = (secs: number) => {
     if (isNaN(secs)) return '0:00'
     const h = Math.floor(secs / 3600)
@@ -343,7 +400,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       const video = videoRef.current
       if (!video) return
 
-      if (item.Type === 'Series' || item.Type === 'Season') {
+      const current = itemRef.current
+
+      if (current.Type === 'Series' || current.Type === 'Season') {
         console.warn('Cannot stream Series entity directly, waiting for episode resolution')
         return
       }
@@ -353,19 +412,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
         hlsRef.current = null
       }
 
-      const currentAudio = audioIdx !== undefined ? audioIdx : selectedAudioIndex
+      const currentAudio = audioIdx !== undefined ? audioIdx : selectedAudioIndexRef.current
 
       const targetSeconds =
         seekSeconds !== undefined
           ? seekSeconds
           : video.currentTime > 0
           ? video.currentTime
-          : (item.UserData?.PlaybackPositionTicks || 0) / (1000 * 10000)
+          : (current.UserData?.PlaybackPositionTicks || 0) / (1000 * 10000)
 
       // Offline playback directly from service worker cache
       if (isOffline) {
         setPlayMethod('DirectPlay')
-        video.src = `/offline-video/${item.Id}`
+        video.src = `/offline-video/${current.Id}`
         video.onloadedmetadata = () => {
           if (targetSeconds > 0 && targetSeconds < (video.duration || 0) - 10) {
             video.currentTime = targetSeconds
@@ -380,7 +439,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       // Jellyfin 12 negotiates the stream: the server picks direct play vs. remux vs. transcode.
       let info
       try {
-        info = await jellyfinApi.getPlaybackInfo(item.Id, user.Id, {
+        info = await jellyfinApi.getPlaybackInfo(current.Id, user.Id, {
           audioStreamIndex: currentAudio,
           startTimeTicks: targetSeconds > 0 ? Math.floor(targetSeconds * 1e7) : undefined,
         })
@@ -391,7 +450,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
       const source = info.MediaSources?.[0]
       if (!source) {
-        console.error('No playable media source returned for item', item.Id)
+        console.error('No playable media source returned for item', current.Id)
         return
       }
 
@@ -402,15 +461,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       const preferDirect = !useTranscode && (source.SupportsDirectPlay || source.SupportsDirectStream)
       const effective = preferDirect ? { ...source, TranscodingUrl: undefined } : source
 
-      const resolved = jellyfinApi.resolvePlaybackUrl(item.Id, effective, info.PlaySessionId)
+      const resolved = jellyfinApi.resolvePlaybackUrl(current.Id, effective, info.PlaySessionId)
       setPlayMethod(resolved.playMethod)
 
       jellyfinApi.reportPlaybackStart({
-        ItemId: item.Id,
+        ItemId: current.Id,
         MediaSourceId: source.Id,
         PlaySessionId: info.PlaySessionId,
         AudioStreamIndex: currentAudio,
-        SubtitleStreamIndex: selectedSubtitleIndex,
+        SubtitleStreamIndex: selectedSubtitleIndexRef.current,
         PositionTicks: Math.floor(targetSeconds * 1e7),
         PlayMethod: resolved.playMethod,
       })
@@ -467,7 +526,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
         }
       }
     },
-    [item, token, user, isOffline, selectedAudioIndex, selectedSubtitleIndex, forceTranscode]
+    [token, user, isOffline, forceTranscode]
   )
 
   useEffect(() => {
@@ -1083,17 +1142,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
                   }
                 }}
               >
-                {hoverTime !== null && duration > 0 && (
-                  <div
-                    className="scrub-tooltip"
-                    style={{
-                      left: `${Math.max(2, Math.min(98, hoverPercent))}%`,
-                    }}
-                  >
-                    <div className="scrub-tooltip-time">{formatTime(hoverTime)}</div>
-                    {hoverChapter && <div className="scrub-tooltip-chapter">{hoverChapter}</div>}
-                  </div>
-                )}
+                {hoverTime !== null && duration > 0 && (() => {
+                  const frame = trickplayFrameFor(hoverTime)
+                  return (
+                    <div
+                      className="scrub-tooltip"
+                      style={{
+                        left: `${Math.max(2, Math.min(98, hoverPercent))}%`,
+                      }}
+                    >
+                      {frame && (
+                        <div
+                          className="scrub-tooltip-thumb"
+                          style={{
+                            width: frame.width,
+                            height: frame.height,
+                            backgroundImage: `url("${frame.url}")`,
+                            backgroundPosition: `${frame.offsetX}px ${frame.offsetY}px`,
+                            backgroundSize: `${frame.sheetWidth}px ${frame.sheetHeight}px`,
+                          }}
+                        />
+                      )}
+                      <div className="scrub-tooltip-time">{formatTime(hoverTime)}</div>
+                      {hoverChapter && <div className="scrub-tooltip-chapter">{hoverChapter}</div>}
+                    </div>
+                  )
+                })()}
 
                 <div className="scrub-track">
                   {duration > 0 && (
