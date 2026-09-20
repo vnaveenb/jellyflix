@@ -1,0 +1,958 @@
+{
+  "serverVersion": "12.0.0",
+  "capturedFrom": "live Jellyfin server /api-docs/openapi.json",
+  "paths": {
+    "/Albums/{itemId}/InstantMix": [
+      "GET"
+    ],
+    "/Albums/{itemId}/Similar": [
+      "GET"
+    ],
+    "/Artists": [
+      "GET"
+    ],
+    "/Artists/AlbumArtists": [
+      "GET"
+    ],
+    "/Artists/{itemId}/InstantMix": [
+      "GET"
+    ],
+    "/Artists/{itemId}/Similar": [
+      "GET"
+    ],
+    "/Artists/{name}": [
+      "GET"
+    ],
+    "/Artists/{name}/Images/{imageType}/{imageIndex}": [
+      "GET",
+      "HEAD"
+    ],
+    "/Audio/{itemId}/Lyrics": [
+      "DELETE",
+      "GET",
+      "POST"
+    ],
+    "/Audio/{itemId}/RemoteSearch/Lyrics": [
+      "GET"
+    ],
+    "/Audio/{itemId}/RemoteSearch/Lyrics/{lyricId}": [
+      "POST"
+    ],
+    "/Audio/{itemId}/stream": [
+      "GET",
+      "HEAD"
+    ],
+    "/Audio/{itemId}/stream.{container}": [
+      "GET",
+      "HEAD"
+    ],
+    "/Audio/{itemId}/universal": [
+      "GET",
+      "HEAD"
+    ],
+    "/Auth/Keys": [
+      "GET",
+      "POST"
+    ],
+    "/Auth/Keys/{key}": [
+      "DELETE"
+    ],
+    "/Auth/PasswordResetProviders": [
+      "GET"
+    ],
+    "/Auth/Providers": [
+      "GET"
+    ],
+    "/Backup": [
+      "GET"
+    ],
+    "/Backup/Create": [
+      "POST"
+    ],
+    "/Backup/Manifest": [
+      "GET"
+    ],
+    "/Backup/Restore": [
+      "POST"
+    ],
+    "/Branding/Configuration": [
+      "GET"
+    ],
+    "/Branding/Css": [
+      "GET"
+    ],
+    "/Branding/Css.css": [
+      "GET"
+    ],
+    "/Branding/Splashscreen": [
+      "DELETE",
+      "GET",
+      "POST"
+    ],
+    "/Channels": [
+      "GET"
+    ],
+    "/Channels/Features": [
+      "GET"
+    ],
+    "/Channels/Items/Latest": [
+      "GET"
+    ],
+    "/Channels/{channelId}/Features": [
+      "GET"
+    ],
+    "/Channels/{channelId}/Items": [
+      "GET"
+    ],
+    "/ClientLog/Document": [
+      "POST"
+    ],
+    "/Collections": [
+      "POST"
+    ],
+    "/Collections/{collectionId}/Items": [
+      "DELETE",
+      "POST"
+    ],
+    "/Devices": [
+      "DELETE",
+      "GET"
+    ],
+    "/Devices/Info": [
+      "GET"
+    ],
+    "/Devices/Options": [
+      "GET",
+      "POST"
+    ],
+    "/DisplayPreferences/{displayPreferencesId}": [
+      "GET",
+      "POST"
+    ],
+    "/Environment/DefaultDirectoryBrowser": [
+      "GET"
+    ],
+    "/Environment/DirectoryContents": [
+      "GET"
+    ],
+    "/Environment/Drives": [
+      "GET"
+    ],
+    "/Environment/ParentPath": [
+      "GET"
+    ],
+    "/Environment/ValidatePath": [
+      "POST"
+    ],
+    "/FallbackFont/Fonts": [
+      "GET"
+    ],
+    "/FallbackFont/Fonts/{name}": [
+      "GET"
+    ],
+    "/Genres": [
+      "GET"
+    ],
+    "/Genres/{genreName}": [
+      "GET"
+    ],
+    "/Genres/{name}/Images/{imageType}": [
+      "GET",
+      "HEAD"
+    ],
+    "/Genres/{name}/Images/{imageType}/{imageIndex}": [
+      "GET",
+      "HEAD"
+    ],
+    "/GetUtcTime": [
+      "GET"
+    ],
+    "/Items": [
+      "DELETE",
+      "GET"
+    ],
+    "/Items/Counts": [
+      "GET"
+    ],
+    "/Items/Filters": [
+      "GET"
+    ],
+    "/Items/Filters2": [
+      "GET"
+    ],
+    "/Items/Latest": [
+      "GET"
+    ],
+    "/Items/RemoteSearch/Apply/{itemId}": [
+      "POST"
+    ],
+    "/Items/RemoteSearch/Book": [
+      "POST"
+    ],
+    "/Items/RemoteSearch/BoxSet": [
+      "POST"
+    ],
+    "/Items/RemoteSearch/Movie": [
+      "POST"
+    ],
+    "/Items/RemoteSearch/MusicAlbum": [
+      "POST"
+    ],
+    "/Items/RemoteSearch/MusicArtist": [
+      "POST"
+    ],
+    "/Items/RemoteSearch/MusicVideo": [
+      "POST"
+    ],
+    "/Items/RemoteSearch/Person": [
+      "POST"
+    ],
+    "/Items/RemoteSearch/Series": [
+      "POST"
+    ],
+    "/Items/RemoteSearch/Trailer": [
+      "POST"
+    ],
+    "/Items/Root": [
+      "GET"
+    ],
+    "/Items/Suggestions": [
+      "GET"
+    ],
+    "/Items/{itemId}": [
+      "DELETE",
+      "GET",
+      "POST"
+    ],
+    "/Items/{itemId}/Ancestors": [
+      "GET"
+    ],
+    "/Items/{itemId}/Collections": [
+      "GET"
+    ],
+    "/Items/{itemId}/ContentType": [
+      "POST"
+    ],
+    "/Items/{itemId}/Download": [
+      "GET"
+    ],
+    "/Items/{itemId}/ExternalIdInfos": [
+      "GET"
+    ],
+    "/Items/{itemId}/File": [
+      "GET"
+    ],
+    "/Items/{itemId}/Images": [
+      "GET"
+    ],
+    "/Items/{itemId}/Images/{imageType}": [
+      "DELETE",
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "/Items/{itemId}/Images/{imageType}/{imageIndex}": [
+      "DELETE",
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "/Items/{itemId}/Images/{imageType}/{imageIndex}/Index": [
+      "POST"
+    ],
+    "/Items/{itemId}/Images/{imageType}/{imageIndex}/{tag}/{format}/{maxWidth}/{maxHeight}/{percentPlayed}/{unplayedCount}": [
+      "GET",
+      "HEAD"
+    ],
+    "/Items/{itemId}/InstantMix": [
+      "GET"
+    ],
+    "/Items/{itemId}/Intros": [
+      "GET"
+    ],
+    "/Items/{itemId}/LocalTrailers": [
+      "GET"
+    ],
+    "/Items/{itemId}/MetadataEditor": [
+      "GET"
+    ],
+    "/Items/{itemId}/PlaybackInfo": [
+      "GET",
+      "POST"
+    ],
+    "/Items/{itemId}/Refresh": [
+      "POST"
+    ],
+    "/Items/{itemId}/RemoteImages": [
+      "GET"
+    ],
+    "/Items/{itemId}/RemoteImages/Download": [
+      "POST"
+    ],
+    "/Items/{itemId}/RemoteImages/Providers": [
+      "GET"
+    ],
+    "/Items/{itemId}/RemoteSearch/Subtitles/{language}": [
+      "GET"
+    ],
+    "/Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}": [
+      "POST"
+    ],
+    "/Items/{itemId}/Similar": [
+      "GET"
+    ],
+    "/Items/{itemId}/SpecialFeatures": [
+      "GET"
+    ],
+    "/Items/{itemId}/ThemeMedia": [
+      "GET"
+    ],
+    "/Items/{itemId}/ThemeSongs": [
+      "GET"
+    ],
+    "/Items/{itemId}/ThemeVideos": [
+      "GET"
+    ],
+    "/Libraries/AvailableOptions": [
+      "GET"
+    ],
+    "/Library/Media/Updated": [
+      "POST"
+    ],
+    "/Library/MediaFolders": [
+      "GET"
+    ],
+    "/Library/Movies/Added": [
+      "POST"
+    ],
+    "/Library/Movies/Updated": [
+      "POST"
+    ],
+    "/Library/PhysicalPaths": [
+      "GET"
+    ],
+    "/Library/Refresh": [
+      "POST"
+    ],
+    "/Library/Series/Added": [
+      "POST"
+    ],
+    "/Library/Series/Updated": [
+      "POST"
+    ],
+    "/Library/VirtualFolders": [
+      "DELETE",
+      "GET",
+      "POST"
+    ],
+    "/Library/VirtualFolders/LibraryOptions": [
+      "POST"
+    ],
+    "/Library/VirtualFolders/Name": [
+      "POST"
+    ],
+    "/Library/VirtualFolders/Paths": [
+      "DELETE",
+      "POST"
+    ],
+    "/Library/VirtualFolders/Paths/Update": [
+      "POST"
+    ],
+    "/LiveStreams/Close": [
+      "POST"
+    ],
+    "/LiveStreams/Open": [
+      "POST"
+    ],
+    "/LiveTv/ChannelMappingOptions": [
+      "GET"
+    ],
+    "/LiveTv/ChannelMappings": [
+      "POST"
+    ],
+    "/LiveTv/Channels": [
+      "GET"
+    ],
+    "/LiveTv/Channels/{channelId}": [
+      "GET"
+    ],
+    "/LiveTv/GuideInfo": [
+      "GET"
+    ],
+    "/LiveTv/Info": [
+      "GET"
+    ],
+    "/LiveTv/ListingProviders": [
+      "DELETE",
+      "POST"
+    ],
+    "/LiveTv/ListingProviders/Default": [
+      "GET"
+    ],
+    "/LiveTv/ListingProviders/Lineups": [
+      "GET"
+    ],
+    "/LiveTv/ListingProviders/SchedulesDirect/Countries": [
+      "GET"
+    ],
+    "/LiveTv/LiveRecordings/{recordingId}/stream": [
+      "GET"
+    ],
+    "/LiveTv/LiveStreamFiles/{streamId}/stream.{container}": [
+      "GET"
+    ],
+    "/LiveTv/Programs": [
+      "GET",
+      "POST"
+    ],
+    "/LiveTv/Programs/Recommended": [
+      "GET"
+    ],
+    "/LiveTv/Programs/{programId}": [
+      "GET"
+    ],
+    "/LiveTv/Recordings": [
+      "GET"
+    ],
+    "/LiveTv/Recordings/Folders": [
+      "GET"
+    ],
+    "/LiveTv/Recordings/{recordingId}": [
+      "DELETE",
+      "GET"
+    ],
+    "/LiveTv/SeriesTimers": [
+      "GET",
+      "POST"
+    ],
+    "/LiveTv/SeriesTimers/{timerId}": [
+      "DELETE",
+      "GET",
+      "POST"
+    ],
+    "/LiveTv/Timers": [
+      "GET",
+      "POST"
+    ],
+    "/LiveTv/Timers/Defaults": [
+      "GET"
+    ],
+    "/LiveTv/Timers/{timerId}": [
+      "DELETE",
+      "GET",
+      "POST"
+    ],
+    "/LiveTv/TunerHosts": [
+      "DELETE",
+      "POST"
+    ],
+    "/LiveTv/TunerHosts/Types": [
+      "GET"
+    ],
+    "/LiveTv/Tuners/Discover": [
+      "GET"
+    ],
+    "/LiveTv/Tuners/Discvover": [
+      "GET"
+    ],
+    "/LiveTv/Tuners/{tunerId}/Reset": [
+      "POST"
+    ],
+    "/Localization/Countries": [
+      "GET"
+    ],
+    "/Localization/Cultures": [
+      "GET"
+    ],
+    "/Localization/Options": [
+      "GET"
+    ],
+    "/Localization/ParentalRatings": [
+      "GET"
+    ],
+    "/MediaSegments/{itemId}": [
+      "GET"
+    ],
+    "/Movies/Recommendations": [
+      "GET"
+    ],
+    "/Movies/{itemId}/Similar": [
+      "GET"
+    ],
+    "/MusicGenres/InstantMix": [
+      "GET"
+    ],
+    "/MusicGenres/{genreName}": [
+      "GET"
+    ],
+    "/MusicGenres/{name}/Images/{imageType}": [
+      "GET",
+      "HEAD"
+    ],
+    "/MusicGenres/{name}/Images/{imageType}/{imageIndex}": [
+      "GET",
+      "HEAD"
+    ],
+    "/MusicGenres/{name}/InstantMix": [
+      "GET"
+    ],
+    "/Packages": [
+      "GET"
+    ],
+    "/Packages/Installed/{name}": [
+      "POST"
+    ],
+    "/Packages/Installing/{packageId}": [
+      "DELETE"
+    ],
+    "/Packages/{name}": [
+      "GET"
+    ],
+    "/Persons": [
+      "GET"
+    ],
+    "/Persons/{name}": [
+      "GET"
+    ],
+    "/Persons/{name}/Images/{imageType}": [
+      "GET",
+      "HEAD"
+    ],
+    "/Persons/{name}/Images/{imageType}/{imageIndex}": [
+      "GET",
+      "HEAD"
+    ],
+    "/Playback/BitrateTest": [
+      "GET"
+    ],
+    "/Playlists": [
+      "POST"
+    ],
+    "/Playlists/{itemId}/InstantMix": [
+      "GET"
+    ],
+    "/Playlists/{playlistId}": [
+      "GET",
+      "POST"
+    ],
+    "/Playlists/{playlistId}/Items": [
+      "DELETE",
+      "GET",
+      "POST"
+    ],
+    "/Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}": [
+      "POST"
+    ],
+    "/Playlists/{playlistId}/Users": [
+      "GET"
+    ],
+    "/Playlists/{playlistId}/Users/{userId}": [
+      "DELETE",
+      "GET",
+      "POST"
+    ],
+    "/Plugins": [
+      "GET"
+    ],
+    "/Plugins/{pluginId}": [
+      "DELETE"
+    ],
+    "/Plugins/{pluginId}/Configuration": [
+      "GET",
+      "POST"
+    ],
+    "/Plugins/{pluginId}/Manifest": [
+      "POST"
+    ],
+    "/Plugins/{pluginId}/{version}": [
+      "DELETE"
+    ],
+    "/Plugins/{pluginId}/{version}/Disable": [
+      "POST"
+    ],
+    "/Plugins/{pluginId}/{version}/Enable": [
+      "POST"
+    ],
+    "/Plugins/{pluginId}/{version}/Image": [
+      "GET"
+    ],
+    "/Providers/Lyrics/{lyricId}": [
+      "GET"
+    ],
+    "/Providers/Subtitles/Subtitles/{subtitleId}": [
+      "GET"
+    ],
+    "/QuickConnect/Authorize": [
+      "POST"
+    ],
+    "/QuickConnect/Connect": [
+      "GET"
+    ],
+    "/QuickConnect/Enabled": [
+      "GET"
+    ],
+    "/QuickConnect/Initiate": [
+      "POST"
+    ],
+    "/Repositories": [
+      "GET",
+      "POST"
+    ],
+    "/ScheduledTasks": [
+      "GET"
+    ],
+    "/ScheduledTasks/Running/{taskId}": [
+      "DELETE",
+      "POST"
+    ],
+    "/ScheduledTasks/{taskId}": [
+      "GET"
+    ],
+    "/ScheduledTasks/{taskId}/Triggers": [
+      "POST"
+    ],
+    "/Search/Hints": [
+      "GET"
+    ],
+    "/Sessions": [
+      "GET"
+    ],
+    "/Sessions/Capabilities": [
+      "POST"
+    ],
+    "/Sessions/Capabilities/Full": [
+      "POST"
+    ],
+    "/Sessions/Logout": [
+      "POST"
+    ],
+    "/Sessions/Playing": [
+      "POST"
+    ],
+    "/Sessions/Playing/Ping": [
+      "POST"
+    ],
+    "/Sessions/Playing/Progress": [
+      "POST"
+    ],
+    "/Sessions/Playing/Stopped": [
+      "POST"
+    ],
+    "/Sessions/Viewing": [
+      "POST"
+    ],
+    "/Sessions/{sessionId}/Command": [
+      "POST"
+    ],
+    "/Sessions/{sessionId}/Command/{command}": [
+      "POST"
+    ],
+    "/Sessions/{sessionId}/Message": [
+      "POST"
+    ],
+    "/Sessions/{sessionId}/Playing": [
+      "POST"
+    ],
+    "/Sessions/{sessionId}/Playing/{command}": [
+      "POST"
+    ],
+    "/Sessions/{sessionId}/System/{command}": [
+      "POST"
+    ],
+    "/Sessions/{sessionId}/User/{userId}": [
+      "DELETE",
+      "POST"
+    ],
+    "/Sessions/{sessionId}/Viewing": [
+      "POST"
+    ],
+    "/Shows/NextUp": [
+      "GET"
+    ],
+    "/Shows/Upcoming": [
+      "GET"
+    ],
+    "/Shows/{itemId}/Similar": [
+      "GET"
+    ],
+    "/Shows/{seriesId}/Episodes": [
+      "GET"
+    ],
+    "/Shows/{seriesId}/Seasons": [
+      "GET"
+    ],
+    "/Songs/{itemId}/InstantMix": [
+      "GET"
+    ],
+    "/Startup/Complete": [
+      "POST"
+    ],
+    "/Startup/Configuration": [
+      "GET",
+      "POST"
+    ],
+    "/Startup/FirstUser": [
+      "GET"
+    ],
+    "/Startup/RemoteAccess": [
+      "POST"
+    ],
+    "/Startup/User": [
+      "GET",
+      "POST"
+    ],
+    "/Studios": [
+      "GET"
+    ],
+    "/Studios/{name}": [
+      "GET"
+    ],
+    "/Studios/{name}/Images/{imageType}": [
+      "GET",
+      "HEAD"
+    ],
+    "/Studios/{name}/Images/{imageType}/{imageIndex}": [
+      "GET",
+      "HEAD"
+    ],
+    "/SyncPlay/Buffering": [
+      "POST"
+    ],
+    "/SyncPlay/Join": [
+      "POST"
+    ],
+    "/SyncPlay/Leave": [
+      "POST"
+    ],
+    "/SyncPlay/List": [
+      "GET"
+    ],
+    "/SyncPlay/MovePlaylistItem": [
+      "POST"
+    ],
+    "/SyncPlay/New": [
+      "POST"
+    ],
+    "/SyncPlay/NextItem": [
+      "POST"
+    ],
+    "/SyncPlay/Pause": [
+      "POST"
+    ],
+    "/SyncPlay/Ping": [
+      "POST"
+    ],
+    "/SyncPlay/PreviousItem": [
+      "POST"
+    ],
+    "/SyncPlay/Queue": [
+      "POST"
+    ],
+    "/SyncPlay/Ready": [
+      "POST"
+    ],
+    "/SyncPlay/RemoveFromPlaylist": [
+      "POST"
+    ],
+    "/SyncPlay/Seek": [
+      "POST"
+    ],
+    "/SyncPlay/SetIgnoreWait": [
+      "POST"
+    ],
+    "/SyncPlay/SetNewQueue": [
+      "POST"
+    ],
+    "/SyncPlay/SetPlaylistItem": [
+      "POST"
+    ],
+    "/SyncPlay/SetRepeatMode": [
+      "POST"
+    ],
+    "/SyncPlay/SetShuffleMode": [
+      "POST"
+    ],
+    "/SyncPlay/Stop": [
+      "POST"
+    ],
+    "/SyncPlay/Unpause": [
+      "POST"
+    ],
+    "/SyncPlay/{id}": [
+      "GET"
+    ],
+    "/System/ActivityLog/Entries": [
+      "GET"
+    ],
+    "/System/Configuration": [
+      "GET",
+      "POST"
+    ],
+    "/System/Configuration/Branding": [
+      "POST"
+    ],
+    "/System/Configuration/MetadataOptions/Default": [
+      "GET"
+    ],
+    "/System/Configuration/{key}": [
+      "GET",
+      "POST"
+    ],
+    "/System/Endpoint": [
+      "GET"
+    ],
+    "/System/Info": [
+      "GET"
+    ],
+    "/System/Info/Public": [
+      "GET"
+    ],
+    "/System/Info/Storage": [
+      "GET"
+    ],
+    "/System/Logs": [
+      "GET"
+    ],
+    "/System/Logs/Log": [
+      "GET"
+    ],
+    "/System/Ping": [
+      "GET",
+      "POST"
+    ],
+    "/System/Restart": [
+      "POST"
+    ],
+    "/System/Shutdown": [
+      "POST"
+    ],
+    "/Trailers": [
+      "GET"
+    ],
+    "/Trailers/{itemId}/Similar": [
+      "GET"
+    ],
+    "/UserFavoriteItems/{itemId}": [
+      "DELETE",
+      "POST"
+    ],
+    "/UserImage": [
+      "DELETE",
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "/UserItems/Resume": [
+      "GET"
+    ],
+    "/UserItems/{itemId}/Rating": [
+      "DELETE",
+      "POST"
+    ],
+    "/UserItems/{itemId}/UserData": [
+      "GET",
+      "POST"
+    ],
+    "/UserPlayedItems/{itemId}": [
+      "DELETE",
+      "POST"
+    ],
+    "/UserViews": [
+      "GET"
+    ],
+    "/UserViews/GroupingOptions": [
+      "GET"
+    ],
+    "/Users": [
+      "GET",
+      "POST"
+    ],
+    "/Users/AuthenticateByName": [
+      "POST"
+    ],
+    "/Users/AuthenticateWithQuickConnect": [
+      "POST"
+    ],
+    "/Users/Configuration": [
+      "POST"
+    ],
+    "/Users/ForgotPassword": [
+      "POST"
+    ],
+    "/Users/ForgotPassword/Pin": [
+      "POST"
+    ],
+    "/Users/Me": [
+      "GET"
+    ],
+    "/Users/New": [
+      "POST"
+    ],
+    "/Users/Password": [
+      "POST"
+    ],
+    "/Users/Public": [
+      "GET"
+    ],
+    "/Users/{userId}": [
+      "DELETE",
+      "GET"
+    ],
+    "/Users/{userId}/Policy": [
+      "POST"
+    ],
+    "/Videos/MergeVersions": [
+      "POST"
+    ],
+    "/Videos/{itemId}/AdditionalParts": [
+      "GET"
+    ],
+    "/Videos/{itemId}/AlternateSources": [
+      "DELETE"
+    ],
+    "/Videos/{itemId}/Subtitles": [
+      "POST"
+    ],
+    "/Videos/{itemId}/Subtitles/{index}": [
+      "DELETE"
+    ],
+    "/Videos/{itemId}/Trickplay/{width}/tiles.m3u8": [
+      "GET"
+    ],
+    "/Videos/{itemId}/Trickplay/{width}/{index}.jpg": [
+      "GET"
+    ],
+    "/Videos/{itemId}/stream": [
+      "GET",
+      "HEAD"
+    ],
+    "/Videos/{itemId}/stream.{container}": [
+      "GET",
+      "HEAD"
+    ],
+    "/Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/subtitles.m3u8": [
+      "GET"
+    ],
+    "/Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/Stream.{routeFormat}": [
+      "GET"
+    ],
+    "/Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/{routeStartPositionTicks}/Stream.{routeFormat}": [
+      "GET"
+    ],
+    "/Videos/{videoId}/{mediaSourceId}/Attachments/{index}": [
+      "GET"
+    ],
+    "/Years": [
+      "GET"
+    ],
+    "/Years/{year}": [
+      "GET"
+    ],
+    "/web/ConfigurationPage": [
+      "GET"
+    ],
+    "/web/ConfigurationPages": [
+      "GET"
+    ]
+  }
+}

@@ -2,14 +2,21 @@ import type {
   JellyfinAuthResponse,
   JellyfinItem,
   JellyfinItemsResponse,
+  JellyfinMediaSource,
   JellyfinUser,
+  MediaSegment,
+  MediaSegmentsResponse,
+  MediaSegmentType,
+  PlaybackInfoResponse,
   PlaybackSessionReport,
   RemoteSearchResult,
+  TrickplayInfo,
 } from '../types/jellyfin'
+import { buildDeviceProfile } from './deviceProfile'
 
-const CLIENT_NAME = 'JellyFlix'
-const CLIENT_VERSION = '1.0.0'
-const DEVICE_NAME = 'JellyFlix Web'
+const CLIENT_NAME = 'JellyTube'
+const CLIENT_VERSION = '2.0.0'
+const DEVICE_NAME = 'JellyTube Web'
 
 export function getDeviceId(): string {
   let id = localStorage.getItem('jellyflix_device_id')
@@ -152,19 +159,19 @@ export class JellyfinApi {
 
   // Media Library Views (Movies, Shows, etc.)
   async getUserViews(userId: string): Promise<JellyfinItemsResponse> {
-    return this.fetch<JellyfinItemsResponse>(`/Users/${userId}/Views`)
+    return this.fetch<JellyfinItemsResponse>(`/UserViews?userId=${encodeURIComponent(userId)}`)
   }
 
   // Resume Items (Continue Watching)
   async getResumeItems(userId: string, limit = 12): Promise<JellyfinItemsResponse> {
     const params = new URLSearchParams({
+      userId,
       Limit: limit.toString(),
-      Recursive: 'true',
-      Fields: 'Overview,PrimaryImageAspectRatio,UserData,SeriesInfo',
+      Fields: 'Overview,PrimaryImageAspectRatio,UserData',
       MediaTypes: 'Video',
       EnableTotalRecordCount: 'true',
     })
-    return this.fetch<JellyfinItemsResponse>(`/Users/${userId}/Items/Resume?${params.toString()}`)
+    return this.fetch<JellyfinItemsResponse>(`/UserItems/Resume?${params.toString()}`)
   }
 
   // Latest Items
@@ -174,12 +181,13 @@ export class JellyfinApi {
     limit = 16
   ): Promise<JellyfinItem[]> {
     const params = new URLSearchParams({
+      userId,
       Limit: limit.toString(),
       IncludeItemTypes: includeItemTypes,
       Fields: 'Overview,PrimaryImageAspectRatio,UserData,Genres,Taglines',
       EnableImageTypes: 'Primary,Backdrop,Banner,Thumb,Logo',
     })
-    return this.fetch<JellyfinItem[]>(`/Users/${userId}/Items/Latest?${params.toString()}`)
+    return this.fetch<JellyfinItem[]>(`/Items/Latest?${params.toString()}`)
   }
 
   // Query Items
@@ -198,6 +206,7 @@ export class JellyfinApi {
     } = {}
   ): Promise<JellyfinItemsResponse> {
     const params = new URLSearchParams({
+      userId,
       Recursive: 'true',
       Fields: 'Overview,PrimaryImageAspectRatio,UserData,Genres,CommunityRating,OfficialRating,RunTimeTicks,Taglines',
       EnableImageTypes: 'Primary,Backdrop,Banner,Thumb,Logo',
@@ -213,15 +222,16 @@ export class JellyfinApi {
     if (options.startIndex) params.set('StartIndex', options.startIndex.toString())
     if (options.isFavorite !== undefined) params.set('IsFavorite', options.isFavorite.toString())
 
-    return this.fetch<JellyfinItemsResponse>(`/Users/${userId}/Items?${params.toString()}`)
+    return this.fetch<JellyfinItemsResponse>(`/Items?${params.toString()}`)
   }
 
   // Item Details
   async getItem(userId: string, itemId: string): Promise<JellyfinItem> {
     const params = new URLSearchParams({
-      Fields: 'Overview,MediaSources,MediaStreams,Chapters,Path,Size,Container,Bitrate,RemoteTrailers,People,Genres,Studios,Taglines',
+      userId,
+      Fields: 'Overview,MediaSources,MediaStreams,Chapters,Path,Size,Container,Bitrate,RemoteTrailers,People,Genres,Studios,Taglines,Trickplay',
     })
-    return this.fetch<JellyfinItem>(`/Users/${userId}/Items/${itemId}?${params.toString()}`)
+    return this.fetch<JellyfinItem>(`/Items/${itemId}?${params.toString()}`)
   }
 
   // Seasons for Series
@@ -294,13 +304,13 @@ export class JellyfinApi {
   // Favorite toggle
   async setFavorite(userId: string, itemId: string, isFavorite: boolean): Promise<void> {
     const method = isFavorite ? 'POST' : 'DELETE'
-    await this.fetch(`/Users/${userId}/FavoriteItems/${itemId}`, { method })
+    await this.fetch(`/UserFavoriteItems/${itemId}?userId=${encodeURIComponent(userId)}`, { method })
   }
 
   // Mark as Watched / Unwatched
   async markPlayed(userId: string, itemId: string, isPlayed: boolean): Promise<void> {
     const method = isPlayed ? 'POST' : 'DELETE'
-    await this.fetch(`/Users/${userId}/PlayedItems/${itemId}`, { method })
+    await this.fetch(`/UserPlayedItems/${itemId}?userId=${encodeURIComponent(userId)}`, { method })
   }
 
   // Update Metadata
@@ -349,9 +359,9 @@ export class JellyfinApi {
   }
 
   // Get Local Trailers
-  async getLocalTrailers(userId: string, itemId: string): Promise<JellyfinItem[]> {
+  async getLocalTrailers(_userId: string, itemId: string): Promise<JellyfinItem[]> {
     try {
-      return await this.fetch<JellyfinItem[]>(`/Users/${userId}/Items/${itemId}/LocalTrailers`)
+      return await this.fetch<JellyfinItem[]>(`/Items/${itemId}/LocalTrailers`)
     } catch {
       return []
     }
@@ -364,6 +374,7 @@ export class JellyfinApi {
       body: JSON.stringify({
         ItemId: report.ItemId,
         MediaSourceId: report.MediaSourceId,
+        PlaySessionId: report.PlaySessionId,
         AudioStreamIndex: report.AudioStreamIndex,
         SubtitleStreamIndex: report.SubtitleStreamIndex,
         PositionTicks: report.PositionTicks,
@@ -379,8 +390,12 @@ export class JellyfinApi {
       body: JSON.stringify({
         ItemId: report.ItemId,
         MediaSourceId: report.MediaSourceId,
+        PlaySessionId: report.PlaySessionId,
+        AudioStreamIndex: report.AudioStreamIndex,
+        SubtitleStreamIndex: report.SubtitleStreamIndex,
         PositionTicks: report.PositionTicks,
         IsPaused: report.IsPaused,
+        PlayMethod: report.PlayMethod,
         EventName: report.EventName || 'TimeUpdate',
       }),
     }).catch(() => {})
@@ -392,6 +407,7 @@ export class JellyfinApi {
       body: JSON.stringify({
         ItemId: report.ItemId,
         MediaSourceId: report.MediaSourceId,
+        PlaySessionId: report.PlaySessionId,
         PositionTicks: report.PositionTicks,
       }),
     }).catch(() => {})
@@ -431,8 +447,12 @@ export class JellyfinApi {
 
   getUserImageUrl(userId: string, tag?: string): string {
     const apiBase = this.getApiBase()
-    const query = tag ? `?tag=${tag}&fillWidth=120&fillHeight=120&quality=90` : '?fillWidth=120&fillHeight=120'
-    return `${apiBase}/Users/${userId}/Images/Primary${query}`
+    const params = new URLSearchParams({ userId, fillWidth: '120', fillHeight: '120' })
+    if (tag) {
+      params.set('tag', tag)
+      params.set('quality', '90')
+    }
+    return `${apiBase}/UserImage?${params.toString()}`
   }
 
   // Item Download URL (Raw original file from Jellyfin)
@@ -455,46 +475,125 @@ export class JellyfinApi {
     return `${apiBase}/Videos/${itemId}/stream?${params.toString()}`
   }
 
-  // HLS Remux / Stream URL (Defaults to VideoCodec=copy for zero server video CPU transcode)
-  getHlsStreamUrl(
+  /**
+   * Negotiate playback with the server.
+   *
+   * Jellyfin 12 removed the client-constructed `/Videos/{id}/master.m3u8` route. The server
+   * now inspects our DeviceProfile and returns the exact URL to use, so the client no longer
+   * guesses at container/codec compatibility.
+   */
+  async getPlaybackInfo(
     itemId: string,
+    userId: string,
     options: {
       mediaSourceId?: string
       audioStreamIndex?: number
       subtitleStreamIndex?: number
       startTimeTicks?: number
-      videoCodec?: string
-      audioCodec?: string
+      maxStreamingBitrate?: number
     } = {}
-  ): string {
-    const apiBase = this.getApiBase()
-    const params = new URLSearchParams({
-      DeviceId: this.deviceId,
-      MediaSourceId: options.mediaSourceId || itemId,
-      VideoCodec: options.videoCodec || 'copy', // Copy video bitstream directly (0% CPU load)
-      AudioCodec: options.audioCodec || 'aac,mp3',
-      TranscodingMaxAudioChannels: '2',
-      SegmentContainer: 'ts',
-      MinSegments: '2',
-      BreakOnNonKeyFrames: 'true',
+  ): Promise<PlaybackInfoResponse> {
+    const body: Record<string, unknown> = {
+      UserId: userId,
+      DeviceProfile: buildDeviceProfile(options.maxStreamingBitrate),
+      EnableDirectPlay: true,
+      EnableDirectStream: true,
+      EnableTranscoding: true,
+      AllowVideoStreamCopy: true,
+      AllowAudioStreamCopy: true,
+      AutoOpenLiveStream: true,
+    }
+    if (options.mediaSourceId) body.MediaSourceId = options.mediaSourceId
+    if (options.audioStreamIndex !== undefined) body.AudioStreamIndex = options.audioStreamIndex
+    if (options.subtitleStreamIndex !== undefined) body.SubtitleStreamIndex = options.subtitleStreamIndex
+    if (options.startTimeTicks) body.StartTimeTicks = options.startTimeTicks
+    if (options.maxStreamingBitrate) body.MaxStreamingBitrate = options.maxStreamingBitrate
+
+    return this.fetch<PlaybackInfoResponse>(`/Items/${itemId}/PlaybackInfo`, {
+      method: 'POST',
+      body: JSON.stringify(body),
     })
-    if (options.audioStreamIndex !== undefined) {
-      params.set('AudioStreamIndex', options.audioStreamIndex.toString())
-    }
-    // Only pass SubtitleStreamIndex if explicit burn-in is requested (otherwise subtitles are external WebVTT)
-    if (options.subtitleStreamIndex !== undefined) {
-      params.set('SubtitleStreamIndex', options.subtitleStreamIndex.toString())
-    }
-    if (options.startTimeTicks) {
-      params.set('StartTimeTicks', options.startTimeTicks.toString())
-    }
-    if (this.token) {
-      params.set('api_key', this.token)
-    }
-    return `${apiBase}/Videos/${itemId}/master.m3u8?${params.toString()}`
   }
 
-  // Subtitle WebVTT Stream URL
+  /** Resolve a negotiated MediaSource into an absolute, authenticated playback URL. */
+  resolvePlaybackUrl(
+    itemId: string,
+    source: JellyfinMediaSource,
+    playSessionId?: string
+  ): { url: string; isHls: boolean; playMethod: 'DirectPlay' | 'DirectStream' | 'Transcode' } {
+    const apiBase = this.getApiBase()
+
+    if (source.TranscodingUrl) {
+      const url = source.TranscodingUrl.startsWith('http')
+        ? source.TranscodingUrl
+        : `${apiBase}${source.TranscodingUrl}`
+      return {
+        url,
+        isHls: source.TranscodingSubProtocol === 'hls' || url.includes('.m3u8'),
+        playMethod: 'Transcode',
+      }
+    }
+
+    const params = new URLSearchParams({ static: 'true', DeviceId: this.deviceId })
+    if (source.Id) params.set('MediaSourceId', source.Id)
+    if (playSessionId) params.set('PlaySessionId', playSessionId)
+    if (this.token) params.set('api_key', this.token)
+
+    return {
+      url: `${apiBase}/Videos/${itemId}/stream?${params.toString()}`,
+      isHls: false,
+      playMethod: source.SupportsDirectPlay ? 'DirectPlay' : 'DirectStream',
+    }
+  }
+
+  /**
+   * Native media segments (Intro / Outro / Recap / Preview / Commercial).
+   * Replaces the old heuristic of string-matching a chapter named "intro".
+   */
+  async getMediaSegments(
+    itemId: string,
+    includeSegmentTypes?: MediaSegmentType[]
+  ): Promise<MediaSegment[]> {
+    const params = new URLSearchParams()
+    for (const t of includeSegmentTypes || []) params.append('includeSegmentTypes', t)
+    const query = params.toString()
+    try {
+      const res = await this.fetch<MediaSegmentsResponse>(
+        `/MediaSegments/${itemId}${query ? '?' + query : ''}`
+      )
+      return res.Items || []
+    } catch {
+      return []
+    }
+  }
+
+  /** Pick the best available trickplay tile resolution for the given target width. */
+  selectTrickplayResolution(
+    trickplay: Record<string, Record<string, TrickplayInfo>> | undefined,
+    mediaSourceId: string,
+    preferredWidth = 320
+  ): TrickplayInfo | null {
+    const forSource = trickplay?.[mediaSourceId]
+    if (!forSource) return null
+    const widths = Object.keys(forSource)
+      .map(Number)
+      .filter((n) => !Number.isNaN(n))
+      .sort((a, b) => a - b)
+    if (widths.length === 0) return null
+    const chosen = widths.find((w) => w >= preferredWidth) ?? widths[widths.length - 1]
+    return forSource[String(chosen)] ?? null
+  }
+
+  /** URL of a trickplay tile sheet (a grid of scrub-preview thumbnails). */
+  getTrickplayTileUrl(itemId: string, width: number, tileIndex: number, mediaSourceId?: string): string {
+    const apiBase = this.getApiBase()
+    const params = new URLSearchParams()
+    if (mediaSourceId) params.set('mediaSourceId', mediaSourceId)
+    if (this.token) params.set('api_key', this.token)
+    const query = params.toString()
+    return `${apiBase}/Videos/${itemId}/Trickplay/${width}/${tileIndex}.jpg${query ? '?' + query : ''}`
+  }
+
   getSubtitleUrl(itemId: string, mediaSourceId: string, index: number): string {
     const apiBase = this.getApiBase()
     const params = new URLSearchParams()

@@ -51,6 +51,56 @@ export interface JellyfinMediaSource {
   SupportsDirectStream?: boolean
   SupportsTranscoding?: boolean
   MediaStreams?: JellyfinMediaStream[]
+  TranscodingUrl?: string
+  TranscodingContainer?: string
+  TranscodingSubProtocol?: 'http' | 'hls'
+  DefaultAudioStreamIndex?: number
+  DefaultSubtitleStreamIndex?: number
+  RunTimeTicks?: number
+  HasSegments?: boolean
+  LiveStreamId?: string
+  OpenToken?: string
+  RequiresClosing?: boolean
+}
+
+/** Jellyfin 12 native media segments — replaces the Intro Skipper plugin. */
+export type MediaSegmentType =
+  | 'Unknown'
+  | 'Commercial'
+  | 'Preview'
+  | 'Recap'
+  | 'Outro'
+  | 'Intro'
+
+export interface MediaSegment {
+  Id: string
+  ItemId: string
+  Type: MediaSegmentType
+  StartTicks: number
+  EndTicks: number
+}
+
+export interface MediaSegmentsResponse {
+  Items: MediaSegment[]
+  TotalRecordCount: number
+  StartIndex?: number
+}
+
+/** Scrub-bar thumbnail tile sheet metadata, keyed by media source id then tile width. */
+export interface TrickplayInfo {
+  Width: number
+  Height: number
+  TileWidth: number
+  TileHeight: number
+  ThumbnailCount: number
+  Interval: number
+  Bandwidth: number
+}
+
+export interface PlaybackInfoResponse {
+  MediaSources: JellyfinMediaSource[]
+  PlaySessionId?: string
+  ErrorCode?: string | null
 }
 
 export interface JellyfinUserData {
@@ -119,6 +169,8 @@ export interface JellyfinItem {
   }[]
   ChildCount?: number
   RemoteTrailers?: { Url: string; Name?: string }[]
+  Trickplay?: Record<string, Record<string, TrickplayInfo>>
+  HasSubtitles?: boolean
 }
 
 export interface JellyfinItemsResponse {
@@ -130,6 +182,7 @@ export interface JellyfinItemsResponse {
 export interface PlaybackSessionReport {
   ItemId: string
   MediaSourceId?: string
+  PlaySessionId?: string
   AudioStreamIndex?: number
   SubtitleStreamIndex?: number
   PositionTicks: number

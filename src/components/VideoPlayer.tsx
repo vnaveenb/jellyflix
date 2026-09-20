@@ -21,10 +21,17 @@ import {
   Download,
   CheckCircle2,
 } from 'lucide-react'
-import type { JellyfinItem, JellyfinMediaStream } from '../types/jellyfin'
+import type { JellyfinItem, JellyfinMediaStream, MediaSegment, MediaSegmentType } from '../types/jellyfin'
 import { jellyfinApi } from '../api/jellyfin'
 import { useAuth } from '../context/AuthContext'
 import { useOffline } from '../context/OfflineContext'
+
+const SKIPPABLE_SEGMENT_LABELS: Partial<Record<MediaSegmentType, string>> = {
+  Intro: 'Skip Intro',
+  Recap: 'Skip Recap',
+  Preview: 'Skip Preview',
+  Commercial: 'Skip Ad',
+}
 
 interface SubtitleCue {
   start: number
@@ -119,7 +126,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     fn()
   }, [])
   const [showControls, setShowControls] = useState(true)
-  const [isHlsFallback, setIsHlsFallback] = useState(false)
+  const [forceTranscode, setForceTranscode] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [showSpeedMenu, setShowSpeedMenu] = useState(false)
   const [showOverviewMore, setShowOverviewMore] = useState(false)
@@ -175,7 +182,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([])
   const [activeSubtitleText, setActiveSubtitleText] = useState<string>('')
   const [isSubtitleLoading, setIsSubtitleLoading] = useState<boolean>(false)
-  const [isAudioRemux, setIsAudioRemux] = useState<boolean>(false)
+  const [playMethod, setPlayMethod] = useState<'DirectPlay' | 'DirectStream' | 'Transcode'>('DirectPlay')
+  const playSessionIdRef = useRef<string | undefined>(undefined)
+  const mediaSourceIdRef = useRef<string | undefined>(undefined)
 
   // In-player Episodes
   const [showEpisodesDrawer, setShowEpisodesDrawer] = useState(false)
@@ -187,7 +196,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
   const [countdownSeconds, setCountdownSeconds] = useState(10)
 
   // Chapters & Skip Intro
-  const [showSkipIntro, setShowSkipIntro] = useState(false)
+  const [mediaSegments, setMediaSegments] = useState<MediaSegment[]>([])
+  const [activeSegment, setActiveSegment] = useState<MediaSegment | null>(null)
+
+  // Native media segments (Jellyfin 12) drive skip buttons and end-of-episode handoff.
+  useEffect(() => {
+    if (isOffline || item.Type === 'Series' || item.Type === 'Season') {
+      setMediaSegments([])
+      return
+    }
+    let cancelled = false
+    jellyfinApi
+      .getMediaSegments(item.Id, ['Intro', 'Outro', 'Recap', 'Preview', 'Commercial'])
+      .then((segs) => {
+        if (!cancelled) setMediaSegments(segs)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [item.Id, item.Type, isOffline])
 
   // Load detailed item streams & chapters
   useEffect(() => {
@@ -298,18 +325,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
       jellyfinApi.reportPlaybackProgress({
         ItemId: item.Id,
+        MediaSourceId: mediaSourceIdRef.current,
+        PlaySessionId: playSessionIdRef.current,
         PositionTicks: positionTicks,
         IsPaused: paused,
+        PlayMethod: playMethod,
         EventName: eventName,
         AudioStreamIndex: selectedAudioIndex,
         SubtitleStreamIndex: selectedSubtitleIndex,
       })
     },
-    [item.Id, selectedAudioIndex, selectedSubtitleIndex]
+    [item.Id, isOffline, playMethod, selectedAudioIndex, selectedSubtitleIndex]
   )
 
   const startStream = useCallback(
-    (useHls: boolean, audioIdx?: number, seekSeconds?: number) => {
+    async (useTranscode: boolean, audioIdx?: number, seekSeconds?: number) => {
       const video = videoRef.current
       if (!video) return
 
@@ -324,8 +354,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       }
 
       const currentAudio = audioIdx !== undefined ? audioIdx : selectedAudioIndex
-      const defaultAudio = audioStreams.find((s) => s.IsDefault) || audioStreams[0]
-      const isAlternateAudio = defaultAudio && currentAudio !== undefined && currentAudio !== defaultAudio.Index
 
       const targetSeconds =
         seekSeconds !== undefined
@@ -336,7 +364,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
       // Offline playback directly from service worker cache
       if (isOffline) {
-        setIsAudioRemux(false)
+        setPlayMethod('DirectPlay')
         video.src = `/offline-video/${item.Id}`
         video.onloadedmetadata = () => {
           if (targetSeconds > 0 && targetSeconds < (video.duration || 0) - 10) {
@@ -347,35 +375,47 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
         return
       }
 
-      const container = (item.Container || item.MediaSources?.[0]?.Container || '').toLowerCase()
-      const isDirectCompatible = (container === 'mp4' || container === 'm4v' || container === 'webm') && !isAlternateAudio && !useHls
+      if (!user) return
 
-      if (isDirectCompatible) {
-        setIsAudioRemux(false)
-        const directUrl = jellyfinApi.getDirectStreamUrl(item.Id)
-        video.src = directUrl
-
-        video.onloadedmetadata = () => {
-          if (targetSeconds > 0 && targetSeconds < (video.duration || 0) - 10) {
-            video.currentTime = targetSeconds
-          }
-          video.play().catch(() => {})
-        }
-
-        video.onerror = () => {
-          console.warn('Direct Play failed. Falling back to Jellyfin Direct Stream Remux...')
-          setIsHlsFallback(true)
-          setIsAudioRemux(true)
-          startStream(true, currentAudio, video.currentTime || targetSeconds)
-        }
-      } else {
-        setIsAudioRemux(true)
-        const hlsUrl = jellyfinApi.getHlsStreamUrl(item.Id, {
+      // Jellyfin 12 negotiates the stream: the server picks direct play vs. remux vs. transcode.
+      let info
+      try {
+        info = await jellyfinApi.getPlaybackInfo(item.Id, user.Id, {
           audioStreamIndex: currentAudio,
-          videoCodec: 'copy',
-          audioCodec: 'aac,mp3',
+          startTimeTicks: targetSeconds > 0 ? Math.floor(targetSeconds * 1e7) : undefined,
         })
+      } catch (err) {
+        console.error('PlaybackInfo negotiation failed:', err)
+        return
+      }
 
+      const source = info.MediaSources?.[0]
+      if (!source) {
+        console.error('No playable media source returned for item', item.Id)
+        return
+      }
+
+      playSessionIdRef.current = info.PlaySessionId
+      mediaSourceIdRef.current = source.Id
+
+      // Prefer the untouched file unless the caller explicitly asked the server to transcode.
+      const preferDirect = !useTranscode && (source.SupportsDirectPlay || source.SupportsDirectStream)
+      const effective = preferDirect ? { ...source, TranscodingUrl: undefined } : source
+
+      const resolved = jellyfinApi.resolvePlaybackUrl(item.Id, effective, info.PlaySessionId)
+      setPlayMethod(resolved.playMethod)
+
+      jellyfinApi.reportPlaybackStart({
+        ItemId: item.Id,
+        MediaSourceId: source.Id,
+        PlaySessionId: info.PlaySessionId,
+        AudioStreamIndex: currentAudio,
+        SubtitleStreamIndex: selectedSubtitleIndex,
+        PositionTicks: Math.floor(targetSeconds * 1e7),
+        PlayMethod: resolved.playMethod,
+      })
+
+      if (resolved.isHls) {
         if (Hls.isSupported()) {
           const hls = new Hls({
             enableWorker: true,
@@ -394,7 +434,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
               }
             },
           })
-          hls.loadSource(hlsUrl)
+          hls.loadSource(resolved.url)
           hls.attachMedia(video)
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
             if (targetSeconds > 0 && Math.abs(video.currentTime - targetSeconds) > 1) {
@@ -404,26 +444,41 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           })
           hlsRef.current = hls
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = hlsUrl
+          video.src = resolved.url
           video.onloadedmetadata = () => {
             if (targetSeconds > 0) video.currentTime = targetSeconds
             video.play().catch(() => {})
           }
         }
+        return
+      }
+
+      video.src = resolved.url
+      video.onloadedmetadata = () => {
+        if (targetSeconds > 0 && targetSeconds < (video.duration || 0) - 10) {
+          video.currentTime = targetSeconds
+        }
+        video.play().catch(() => {})
+      }
+      video.onerror = () => {
+        if (!forceTranscode) {
+          console.warn('Direct play failed; retrying via server transcode.')
+          setForceTranscode(true)
+        }
       }
     },
-    [item, token, selectedAudioIndex, audioStreams]
+    [item, token, user, isOffline, selectedAudioIndex, selectedSubtitleIndex, forceTranscode]
   )
 
   useEffect(() => {
-    startStream(isHlsFallback)
+    void startStream(forceTranscode)
     return () => {
       if (hlsRef.current) {
         hlsRef.current.destroy()
         hlsRef.current = null
       }
     }
-  }, [item.Id, isHlsFallback, startStream])
+  }, [item.Id, forceTranscode, startStream])
 
   useEffect(() => {
     progressIntervalRef.current = window.setInterval(() => {
@@ -664,7 +719,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
     if (nextEpisode) {
       setShowBingeCountdown(false)
       setItem(nextEpisode)
-      setIsHlsFallback(false)
+      setForceTranscode(false)
     }
   }
 
@@ -689,15 +744,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
       setActiveSubtitleText('')
     }
 
-    if (item.Chapters && item.Chapters.length > 0) {
-      const introChapter = item.Chapters.find((ch) =>
-        ch.Name?.toLowerCase().includes('intro')
-      )
-      if (introChapter) {
-        const startSec = introChapter.StartPositionTicks / (1000 * 10000)
-        const endSec = startSec + 90
-        setShowSkipIntro(cTime >= startSec && cTime <= endSec)
-      }
+    if (mediaSegments.length > 0) {
+      const ticks = cTime * 1e7
+      const current = mediaSegments.find((s) => ticks >= s.StartTicks && ticks < s.EndTicks)
+      setActiveSegment(current ?? null)
     }
 
     if (nextEpisode && dur > 60 && dur - cTime <= 35 && !showBingeCountdown) {
@@ -771,6 +821,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
 
   const videoStream = audioStreams.length > 0 ? item.MediaStreams?.find((s) => s.Type === 'Video') : null
 
+  const resolutionLabel = (() => {
+    const height = videoStream?.Height
+    if (!height) return null
+    if (height >= 2000) return '4K'
+    if (height >= 1000) return '1080p'
+    if (height >= 700) return '720p'
+    return `${height}p`
+  })()
+
   return (
     <div
       className={`video-player-container ${isMobilePortrait ? 'mobile-youtube-layout' : ''}`}
@@ -831,18 +890,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           </div>
         )}
 
-        {/* Skip Intro Button */}
-        {showSkipIntro && (
+        {/* Skip Intro / Recap / Outro — driven by server-provided media segments */}
+        {activeSegment && SKIPPABLE_SEGMENT_LABELS[activeSegment.Type] && (
           <button
             className="skip-intro-btn"
             onClick={() => {
               if (videoRef.current) {
-                videoRef.current.currentTime += 85
-                setShowSkipIntro(false)
+                videoRef.current.currentTime = activeSegment.EndTicks / 1e7
+                setActiveSegment(null)
               }
             }}
           >
-            Skip Intro
+            {SKIPPABLE_SEGMENT_LABELS[activeSegment.Type]}
           </button>
         )}
 
@@ -1255,8 +1314,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
             <div className="mobile-yt-tags-row">
               {item.ProductionYear && <span className="yt-tag">{item.ProductionYear}</span>}
               {item.OfficialRating && <span className="yt-tag rating">{item.OfficialRating}</span>}
-              <span className="yt-tag hd">1080p</span>
-              <span className="yt-tag match">83% Match</span>
+              {resolutionLabel && <span className="yt-tag hd">{resolutionLabel}</span>}
+              {item.CommunityRating && (
+                <span className="yt-tag match">{item.CommunityRating.toFixed(1)}</span>
+              )}
             </div>
             {item.Overview && (
               <div className="mobile-yt-overview-box">
@@ -1392,7 +1453,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
                       onClick={() => {
                         if (!isCurrent) {
                           setItem(ep)
-                          setIsHlsFallback(false)
+                          setForceTranscode(false)
                         }
                       }}
                     >
@@ -1437,9 +1498,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           <div className="nerd-stat">
             <span>Stream Mode:</span>
             <strong style={{ color: '#46d369' }}>
-              {isAudioRemux
-                ? 'Direct Stream Remux (HLS Video Copy 0% CPU)'
-                : 'Direct Play (Native MP4 0% CPU)'}
+              {playMethod === 'DirectPlay'
+                ? 'Direct Play (original file, no server CPU)'
+                : playMethod === 'DirectStream'
+                ? 'Direct Stream (container remux)'
+                : 'Transcode (server re-encoding)'}
             </strong>
           </div>
           <div className="nerd-stat">
@@ -1453,7 +1516,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
           <div className="nerd-stat">
             <span>Active Audio:</span>
             <span>
-              {audioStreams.find((a) => a.Index === selectedAudioIndex)?.DisplayTitle || 'Default Audio'} ({isAudioRemux ? 'Remux Copy' : 'Direct'})
+              {audioStreams.find((a) => a.Index === selectedAudioIndex)?.DisplayTitle || 'Default Audio'}
             </span>
           </div>
           <div className="nerd-stat">
@@ -1510,7 +1573,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
                     className={`episode-card ${isCurrent ? 'active-playing-ep' : ''}`}
                     onClick={() => {
                       setItem(ep)
-                      setIsHlsFallback(false)
+                      setForceTranscode(false)
                       setShowEpisodesDrawer(false)
                     }}
                   >
@@ -1575,19 +1638,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ item: initialItem, onC
                         onClick={() => {
                           if (selectedAudioIndex === a.Index) return
                           setSelectedAudioIndex(a.Index)
-                          const defaultAudio = audioStreams.find((s) => s.IsDefault) || audioStreams[0]
-                          const isDefault = defaultAudio && a.Index === defaultAudio.Index
                           const currentSec = videoRef.current?.currentTime || 0
-
-                          if (isDefault) {
-                            setIsHlsFallback(false)
-                            setIsAudioRemux(false)
-                            startStream(false, a.Index, currentSec)
-                          } else {
-                            setIsHlsFallback(true)
-                            setIsAudioRemux(true)
-                            startStream(true, a.Index, currentSec)
-                          }
+                          // Re-negotiate: the server decides whether the new track needs a remux.
+                          void startStream(false, a.Index, currentSec)
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
